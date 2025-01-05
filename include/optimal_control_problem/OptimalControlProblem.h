@@ -45,9 +45,9 @@ private:
     bool verbose_{false};
     std::string packagePath_;
     ::casadi::Function IPOPTSolver_;
-    ::casadi::Function SNOPTSolver_;
+    ::casadi::Function BlockSQPSolver_;
     ::casadi::Function libIPOPTSolver_;
-    ::casadi::Function libSNOPTSolver_;
+    ::casadi::Function libBlockSQPSolver_;
 
     enum OCPStateMachine {
         UN_INITIALIZED = 0,

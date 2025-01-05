@@ -40,8 +40,8 @@ OptimalControlProblem::OptimalControlProblem(const std::string& configFilePath) 
     }
     genCode_ = configNode_["gen_code"].as<bool>();
     loadLib_ = configNode_["load_lib"].as<bool>();
-    std::cout<<"是否输出c代码且编译动态链接库："<<genCode_<<std::endl;
-    std::cout<<"是否使用动态链接库对求解器进行加载："<<genCode_<<std::endl;
+    std::cout<<"输出c代码且编译动态链接库："<<genCode_<<std::endl;
+    std::cout<<"使用动态链接库对求解器进行加载："<<genCode_<<std::endl;
 }
 
 void OptimalControlProblem::parseOCPBounds() {
@@ -427,7 +427,7 @@ void OptimalControlProblem::genSolver() {
     // 创建求解器
 //    solver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp);
     IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
-    SNOPTSolver_ = ::casadi::nlpsol("solver", "blocksqp", nlp, solver_opts);
+    BlockSQPSolver_ = ::casadi::nlpsol("solver", "blocksqp", nlp, solver_opts);
     if (!genCode_) {
         return;  // 如果不需要生成代码，直接返回
     }
@@ -435,31 +435,31 @@ void OptimalControlProblem::genSolver() {
     // 文件路径常量定义
     const std::string code_dir = packagePath_ + "/code_gen/";
     const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
-    const std::string SNOPT_solver_file_name = "SNOPT_nlp_code";
+    const std::string BlockSQP_solver_file_name = "BlockSQP_nlp_code";
     const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
-    const std::string SNOPT_solver_source_file = SNOPT_solver_file_name + ".c";
+    const std::string BlockSQP_solver_source_file = BlockSQP_solver_file_name + ".c";
     const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
-    const std::string SNOPT_target_file = code_dir + SNOPT_solver_source_file;
+    const std::string BlockSQP_target_file = code_dir + BlockSQP_solver_source_file;
     const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
-    const std::string SNOPT_shared_lib = code_dir + SNOPT_solver_file_name + ".so";
+    const std::string BlockSQP_shared_lib = code_dir + BlockSQP_solver_file_name + ".so";
 
     try {
         // 生成C代码
         IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
-        SNOPTSolver_.generate_dependencies(SNOPT_solver_source_file);
+        BlockSQPSolver_.generate_dependencies(BlockSQP_solver_source_file);
         // 复制文件到目标目录
         std::string cp_command = "cp " + IPOPT_solver_source_file + " " + IPOPT_target_file;
         if (std::system(cp_command.c_str()) != 0) {
             throw std::runtime_error("Failed to copy IPOPT source file");
         }
-        cp_command = "cp " + SNOPT_solver_source_file + " " + SNOPT_target_file;
+        cp_command = "cp " + BlockSQP_solver_source_file + " " + BlockSQP_target_file;
         if (std::system(cp_command.c_str()) != 0) {
-            throw std::runtime_error("Failed to copy SNOPT source file");
+            throw std::runtime_error("Failed to copy BlockSQP source file");
         }
 
         // 编译共享库
         std::string IPOPT_compile_command = "gcc -fPIC -shared -O3 " + IPOPT_target_file + " -o " + IPOPT_shared_lib;
-        std::string SNOPT_compile_command = "gcc -fPIC -shared -O3 " + SNOPT_target_file + " -o " + SNOPT_shared_lib;
+        std::string BlockSQP_compile_command = "gcc -fPIC -shared -O3 " + BlockSQP_target_file + " -o " + BlockSQP_shared_lib;
 
         if (verbose_) {
             // 输出问题规模信息
@@ -470,7 +470,7 @@ void OptimalControlProblem::genSolver() {
                       << "Parameters: " << reference_.size1() << std::endl;
 
             std::cout << "Compiling with command: " << IPOPT_compile_command << std::endl;
-            std::cout << "Compiling with command: " << SNOPT_compile_command << std::endl;
+            std::cout << "Compiling with command: " << BlockSQP_compile_command << std::endl;
         }
 
         // 执行编译
@@ -479,7 +479,7 @@ void OptimalControlProblem::genSolver() {
         }else if (verbose_) {
             std::cout << "Compilation succeeded!" << std::endl;
         }
-        if (std::system(SNOPT_compile_command.c_str()) != 0) {
+        if (std::system(BlockSQP_compile_command.c_str()) != 0) {
             throw std::runtime_error("Compilation failed");
         }
         else if (verbose_) {
@@ -551,7 +551,7 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &robotSt
                     saveConstraintsToCSV(packagePath_ + "/log/constraints.csv");
                     // 使用生成的代码求解
                     libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt", packagePath_ + "/code_gen/IPOPT_nlp_code.so");
-//                    libSNOPTSolver_ = ::casadi::nlpsol("snopt_solver", "blocksqp", packagePath_ + "/code_gen/SNOPT_nlp_code.so");
+                    libBlockSQPSolver_ = ::casadi::nlpsol("snopt_solver", "blocksqp", packagePath_ + "/code_gen/BlockSQP_nlp_code.so");
                     res = libIPOPTSolver_(arg);
                     firstTime = false;
                 } else {
