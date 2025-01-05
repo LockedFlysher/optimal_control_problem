@@ -149,17 +149,17 @@ endforeach ()
 ######################################## 通用安装配置 ######################################
 # 安装头文件 / Install header files
 install(DIRECTORY
-        include
+        include/
         DESTINATION include)
 
 # 获取当前目录下的所有文件夹
-file(GLOB SUBDIRS RELATIVE . *)
+file(GLOB SUBDIRS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *)
 
 # 遍历所有文件夹，排除特定目录
-foreach(SUBDIR ${SUBDIRS})
-    if(IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${SUBDIR})
+foreach (SUBDIR ${SUBDIRS})
+    if (IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${SUBDIR})
         # 排除 src、include、build 等目录
-        if(NOT ${SUBDIR} STREQUAL "src" AND
+        if (NOT ${SUBDIR} STREQUAL "src" AND
                 NOT ${SUBDIR} STREQUAL "build" AND
                 NOT ${SUBDIR} STREQUAL ".git" AND
                 NOT ${SUBDIR} STREQUAL "install")
@@ -167,10 +167,9 @@ foreach(SUBDIR ${SUBDIRS})
                     ${SUBDIR}
                     DESTINATION share/${PROJECT_NAME}/
             )
-        endif()
-    endif()
-endforeach()
-
+        endif ()
+    endif ()
+endforeach ()
 ######################################## ROS2包配置 ########################################
 # 导出包依赖
 ament_export_dependencies(${parent_packages})
