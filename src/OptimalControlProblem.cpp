@@ -500,9 +500,9 @@ void OptimalControlProblem::genSolver() {
  * 输入当前OCP问题系统的状态，以及参考轨迹，计算出最优轨迹
  * bug : 在调用这个函数的时候，发现求解器接收的constraint的大小是不对的
  * */
-void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &robotStatus, const ::casadi::DM& reference) {
-    if (robotStatus.size1() != statusFrame_.totalSize) {
-        std::cerr << "机器人的状态维度不对，收到状态是" << robotStatus.size1() << "维，期望是" << statusFrame_.totalSize
+void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &statusFrame, const ::casadi::DM& reference) {
+    if (statusFrame.size1() != statusFrame_.totalSize) {
+        std::cerr << "机器人的状态维度不对，收到状态是" << statusFrame.size1() << "维，期望是" << statusFrame_.totalSize
                   << "维\n";
     }
     if(reference.size1()!= statusFrame_.totalSize){
@@ -515,8 +515,8 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &robotSt
     // 设置变量和约束的上下界
     ::casadi::DM lbx = getVariableLowerBounds();
     ::casadi::DM ubx = getVariableUpperBounds();
-    lbx(::casadi::Slice(0, statusFrame_.totalSize)) = robotStatus;
-    ubx(::casadi::Slice(0, statusFrame_.totalSize)) = robotStatus;
+    lbx(::casadi::Slice(0, statusFrame_.totalSize)) = statusFrame;
+    ubx(::casadi::Slice(0, statusFrame_.totalSize)) = statusFrame;
 
     if (verbose_) {
         std::cout << "变量下界:\n" << lbx << std::endl;
@@ -536,7 +536,7 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &robotSt
     arg["ubx"] = ubx;
     arg["lbg"] = lbg;
     arg["ubg"] = ubg;
-    if (firstTime) {
+    if (firstTime_) {
         arg["x0"] = x0;
     } else {
         arg["x0"] = optimalTrajectory_;
@@ -547,13 +547,13 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &robotSt
     if (solverInputCheck(arg)) {
         try {
             if (genCode_) {
-                if (firstTime) {
+                if (firstTime_) {
                     saveConstraintsToCSV(packagePath_ + "/log/constraints.csv");
                     // 使用生成的代码求解
                     libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt", packagePath_ + "/code_gen/IPOPT_nlp_code.so");
                     libBlockSQPSolver_ = ::casadi::nlpsol("snopt_solver", "blocksqp", packagePath_ + "/code_gen/BlockSQP_nlp_code.so");
                     res = libIPOPTSolver_(arg);
-                    firstTime = false;
+                    firstTime_ = false;
                 } else {
                     res = libIPOPTSolver_(arg);
                 }

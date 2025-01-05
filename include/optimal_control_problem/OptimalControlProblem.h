@@ -37,7 +37,7 @@ private:
     std::vector<casadi::DM> inputLowerBounds_;
     //    求解功能使用到的变量们
     ::casadi::SX reference_;
-    bool firstTime{true};
+    bool firstTime_{true};
     ::casadi::DM optimalTrajectory_;
     // OCP问题构建和求解的接口
     bool genCode_{false};
@@ -111,7 +111,7 @@ public:
     /*
      * 把OCP的当前的状态输入到这里，reference的具体的数值发到这里，就行了
      * */
-    void computeOptimalTrajectory(const ::casadi::DM &robotStatus, const ::casadi::DM &reference);
+    void computeOptimalTrajectory(const ::casadi::DM &statusFrame, const ::casadi::DM &reference);
 
     explicit OptimalControlProblem(const std::string &configFilePath);
 
