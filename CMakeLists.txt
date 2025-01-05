@@ -114,6 +114,7 @@ foreach (TARGET_NAME IN LISTS ALL_TARGETS)
 
         # 设置安装规则
         install(TARGETS ${TARGET_NAME}
+                EXPORT export_${PROJECT_NAME}
                 RUNTIME DESTINATION lib/${PROJECT_NAME}
         )
 
