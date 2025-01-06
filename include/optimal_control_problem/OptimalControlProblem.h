@@ -35,8 +35,6 @@ private:
     std::vector<casadi::DM> statusLowerBounds_;
     std::vector<casadi::DM> inputUpperBounds_;
     std::vector<casadi::DM> inputLowerBounds_;
-    //    求解功能使用到的变量们
-    ::casadi::SX reference_;
     bool firstTime_{true};
     ::casadi::DM optimalTrajectory_;
     // OCP问题构建和求解的接口
@@ -99,6 +97,8 @@ public:
     ::casadi::SX getReference();
     ::casadi::DM getOptimalInputFirstFrame();
     casadi::DM getOptimalTrajectory();
+    //    求解功能使用到的变量们
+    ::casadi::SX reference_;
 
     /*
  * 根据配置文件决定
