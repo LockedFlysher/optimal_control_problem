@@ -32,7 +32,7 @@ OptimalControlProblem::OptimalControlProblem(const std::string& configFilePath) 
 
     if (configNode_["verbose"]["variables"].as<bool>()) {
         std::cout << "变量输出，可以通过[verbose.variables]进行关闭\n";
-        std::cout <<"statusVariables:\n"<< statusVariables<<"\n inputVariables:" << inputVariables;
+        std::cout <<"statusVariables:\n"<< statusVariables<<"\n inputVariables:\n" << inputVariables<<"\n";
         std::cout<< "reference预占位符号变量\n："<<reference_<<"\n";
         std::cout<<"状态变量下界"<<statusLowerBounds_<<std::endl;
         std::cout<<"状态变量上界"<<statusUpperBounds_<<"\n";
@@ -410,87 +410,147 @@ float OptimalControlProblem::getDt() const {
  * note : 必需在应用约束和添加损失以后使用！！！！！！！
  * */
 void OptimalControlProblem::genSolver() {
-    // todo ： 完成参数加载控制打印
-    ::casadi::Dict solver_opts;
-    solver_opts["print_in"] = 0;
-    solver_opts["print_out"] = 0;
-    solver_opts["print_time"] = 0;
-    packagePath_ = ament_index_cpp::get_package_share_directory("optimal_control_problem");
-    // 构建NLP问题字典
-    ::casadi::SXDict nlp = {
-            {"x", ::casadi::SX::vertcat({getStatusVariables(), getInputVariables()})},
-            {"f", getCostFunction()},
-            {"g", ::casadi::SX::vertcat(getConstraints())},
-            {"p", reference_}
-    };
-
-    // 创建求解器
-//    solver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp);
-    IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
-    BlockSQPSolver_ = ::casadi::nlpsol("solver", "blocksqp", nlp, solver_opts);
-    if (!genCode_) {
-        return;  // 如果不需要生成代码，直接返回
-    }
-
-    // 文件路径常量定义
-    const std::string code_dir = packagePath_ + "/code_gen/";
-    const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
-    const std::string BlockSQP_solver_file_name = "BlockSQP_nlp_code";
-    const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
-    const std::string BlockSQP_solver_source_file = BlockSQP_solver_file_name + ".c";
-    const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
-    const std::string BlockSQP_target_file = code_dir + BlockSQP_solver_source_file;
-    const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
-    const std::string BlockSQP_shared_lib = code_dir + BlockSQP_solver_file_name + ".so";
-
     try {
-        // 生成C代码
-        IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
-        BlockSQPSolver_.generate_dependencies(BlockSQP_solver_source_file);
-        // 复制文件到目标目录
-        std::string cp_command = "cp " + IPOPT_solver_source_file + " " + IPOPT_target_file;
-        if (std::system(cp_command.c_str()) != 0) {
-            throw std::runtime_error("Failed to copy IPOPT source file");
+        // 设置求解器选项
+        ::casadi::Dict solver_opts;
+        solver_opts["print_in"] = 0;
+        solver_opts["print_out"] = 0;
+        solver_opts["print_time"] = 0;
+
+        // 获取包路径
+        try {
+            packagePath_ = ament_index_cpp::get_package_share_directory("optimal_control_problem");
+        } catch (const std::exception& e) {
+            throw std::runtime_error("Failed to get package path: " + std::string(e.what()));
         }
-        cp_command = "cp " + BlockSQP_solver_source_file + " " + BlockSQP_target_file;
-        if (std::system(cp_command.c_str()) != 0) {
-            throw std::runtime_error("Failed to copy BlockSQP source file");
+
+        // 构建NLP问题
+        ::casadi::SX status_vars = getStatusVariables();
+        ::casadi::SX input_vars = getInputVariables();
+        if (status_vars.is_empty() || input_vars.is_empty()) {
+            throw std::runtime_error("Status or input variables are empty");
+        }
+
+        ::casadi::SX constraints = ::casadi::SX::vertcat(getConstraints());
+        if (constraints.is_empty()) {
+            throw std::runtime_error("Constraints are empty");
+        }
+
+        ::casadi::SXDict nlp = {
+                {"x", ::casadi::SX::vertcat({status_vars, input_vars})},
+                {"f", getCostFunction()},
+                {"g", constraints},
+                {"p", reference_}
+        };
+
+        // 创建求解器
+        try {
+            IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
+            BlockSQPSolver_ = ::casadi::nlpsol("solver", "blocksqp", nlp, solver_opts);
+        } catch (const std::exception& e) {
+            throw std::runtime_error("Failed to create solvers: " + std::string(e.what()));
+        }
+
+        if (!genCode_) {
+            return;
+        }
+
+        // 文件路径设置
+        const std::string code_dir = packagePath_ + "/code_gen/";
+        const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
+        const std::string BlockSQP_solver_file_name = "BlockSQP_nlp_code";
+        const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
+        const std::string BlockSQP_solver_source_file = BlockSQP_solver_file_name + ".c";
+        const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
+        const std::string BlockSQP_target_file = code_dir + BlockSQP_solver_source_file;
+        const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
+        const std::string BlockSQP_shared_lib = code_dir + BlockSQP_solver_file_name + ".so";
+
+        // 确保目标目录存在
+        if (std::system(("mkdir -p " + code_dir).c_str()) != 0) {
+            throw std::runtime_error("Failed to create code generation directory");
+        }
+
+        // 生成代码文件
+        try {
+            IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
+            BlockSQPSolver_.generate_dependencies(BlockSQP_solver_source_file);
+        } catch (const std::exception& e) {
+            throw std::runtime_error("Failed to generate solver dependencies: " + std::string(e.what()));
+        }
+
+        // 复制文件
+        auto copyFile = [](const std::string& src, const std::string& dst) {
+            std::ifstream source(src, std::ios::binary);
+            if (!source) {
+                throw std::runtime_error("Cannot open source file: " + src);
+            }
+
+            std::ofstream dest(dst, std::ios::binary);
+            if (!dest) {
+                throw std::runtime_error("Cannot open destination file: " + dst);
+            }
+
+            dest << source.rdbuf();
+            if (!dest) {
+                throw std::runtime_error("Failed to copy file content from " + src + " to " + dst);
+            }
+        };
+
+        try {
+            copyFile(IPOPT_solver_source_file, IPOPT_target_file);
+            copyFile(BlockSQP_solver_source_file, BlockSQP_target_file);
+        } catch (const std::exception& e) {
+            throw std::runtime_error("File copy failed: " + std::string(e.what()));
+        }
+
+        // 输出问题规模信息
+        if (verbose_) {
+            const auto num_vars = ::casadi::SX::vertcat({status_vars, input_vars}).size1();
+            const auto num_constraints = constraints.size1();
+            const auto num_params = reference_.size1();
+
+            std::cout << "Problem dimensions:\n"
+                      << "Variables: " << num_vars << "\n"
+                      << "Constraints: " << num_constraints << "\n"
+                      << "Parameters: " << num_params << std::endl;
         }
 
         // 编译共享库
-        std::string IPOPT_compile_command = "gcc -fPIC -shared -O3 " + IPOPT_target_file + " -o " + IPOPT_shared_lib;
-        std::string BlockSQP_compile_command = "gcc -fPIC -shared -O3 " + BlockSQP_target_file + " -o " + BlockSQP_shared_lib;
+        const std::string compile_flags = "-fPIC -shared -O3";
 
-        if (verbose_) {
-            // 输出问题规模信息
-            std::cout << "Problem dimensions:" << std::endl
-                      << "Variables: " << ::casadi::SX::vertcat({getStatusVariables(), getInputVariables()}).size1()
-                      << std::endl
-                      << "Constraints: " << ::casadi::SX::vertcat(getConstraints()).size1() << std::endl
-                      << "Parameters: " << reference_.size1() << std::endl;
+        // 修改后的编译函数，使用 this 指针访问 verbose_
+        auto compileLibrary = [this](const std::string& source_file,
+                                     const std::string& output_file,
+                                     const std::string& compile_flags) {
+            std::string compile_cmd = "gcc " + compile_flags + " " + source_file + " -o " + output_file;
 
-            std::cout << "Compiling with command: " << IPOPT_compile_command << std::endl;
-            std::cout << "Compiling with command: " << BlockSQP_compile_command << std::endl;
+            if (this->verbose_) {
+                std::cout << "Compiling with command: " << compile_cmd << std::endl;
+            }
+
+            if (std::system(compile_cmd.c_str()) != 0) {
+                throw std::runtime_error("Compilation failed for " + source_file);
+            }
+
+            if (this->verbose_) {
+                std::cout << "Successfully compiled " << output_file << std::endl;
+            }
+        };
+
+        try {
+            compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
+            compileLibrary(BlockSQP_target_file, BlockSQP_shared_lib, compile_flags);
+        } catch (const std::exception& e) {
+            throw std::runtime_error("Compilation error: " + std::string(e.what()));
         }
 
-        // 执行编译
-        if (std::system(IPOPT_compile_command.c_str()) != 0) {
-            throw std::runtime_error("Compilation failed");
-        }else if (verbose_) {
-            std::cout << "Compilation succeeded!" << std::endl;
-        }
-        if (std::system(BlockSQP_compile_command.c_str()) != 0) {
-            throw std::runtime_error("Compilation failed");
-        }
-        else if (verbose_) {
-            std::cout << "Compilation succeeded!" << std::endl;
-        }
-
-    } catch (const std::exception &e) {
-        std::cerr << "Error during code generation: " << e.what() << std::endl;
-        throw;  // 重新抛出异常，允许上层处理
+    } catch (const std::exception& e) {
+        std::cerr << "Error in genSolver: " << e.what() << std::endl;
+        throw; // 重新抛出异常以允许上层处理
     }
 }
+
 
 ::casadi::SX OptimalControlProblem::getReference() {
     return reference_;

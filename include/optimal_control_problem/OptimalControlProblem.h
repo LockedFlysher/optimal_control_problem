@@ -40,7 +40,7 @@ private:
     // OCP问题构建和求解的接口
     bool genCode_{false};
     bool loadLib_{false};
-    bool verbose_{false};
+    bool verbose_{true};
     std::string packagePath_;
     ::casadi::Function IPOPTSolver_;
     ::casadi::Function BlockSQPSolver_;
@@ -91,7 +91,7 @@ private:
         }
     }
 
-    void initializeFrameWithYAML(Frame &frame, const YAML::Node &config);
+    static void initializeFrameWithYAML(Frame &frame, const YAML::Node &config);
 
 public:
     ::casadi::SX getReference();
@@ -101,13 +101,12 @@ public:
     ::casadi::SX reference_;
 
     /*
- * 根据配置文件决定
- * 1.是否生成c代码和动态链接库
- * 2.是否使用SQP类型的求解器
- * 3.是否从.so加载求解器
- * */
+     * 根据配置文件决定
+     * 1.是否生成c代码和动态链接库
+     * 2.是否使用SQP类型的求解器
+     * 3.是否从.so加载求解器
+     * */
     void genSolver();
-
     /*
      * 把OCP的当前的状态输入到这里，reference的具体的数值发到这里，就行了
      * */
