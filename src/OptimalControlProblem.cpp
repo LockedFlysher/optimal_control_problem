@@ -28,8 +28,6 @@ OptimalControlProblem::OptimalControlProblem(const std::string& configFilePath) 
     inputVariables = casadi::SX::sym("U", horizon_ * inputFrame_.totalSize, 1);
     //    这里的reference是一个符号变量，是用来计算cost的，求解器的创建也需要它
     reference_ = ::casadi::SX::sym("ref", statusFrame_.totalSize, 1);
-
-
     if (configNode_["verbose"]["variables"].as<bool>()) {
         std::cout << "变量输出，可以通过[verbose.variables]进行关闭\n";
         std::cout <<"statusVariables:\n"<< statusVariables<<"\n inputVariables:\n" << inputVariables<<"\n";
@@ -562,7 +560,7 @@ void OptimalControlProblem::genSolver() {
  * */
 void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &statusFrame, const ::casadi::DM& reference) {
     if (statusFrame.size1() != statusFrame_.totalSize) {
-        std::cerr << "机器人的状态维度不对，收到状态是" << statusFrame.size1() << "维，期望是" << statusFrame_.totalSize
+        std::cerr << "优化问题的状态维度不对，收到状态是" << statusFrame.size1() << "维，期望是" << statusFrame_.totalSize
                   << "维\n";
     }
     if(reference.size1()!= statusFrame_.totalSize){
@@ -589,7 +587,13 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &statusF
     // 设置初始猜测全都是0
     const int stateSize = getStatusFrameSize();
     const int inputSize = getInputFrameSize();
-    ::casadi::DM x0 = ::casadi::DM::repmat(::casadi::DM::zeros(stateSize + inputSize, 1), getHorizon());
+
+    ::casadi::DM x0;
+    if(setInitialGuess_){
+        x0 = initialGuess_;
+    } else{
+        x0 = ::casadi::DM::repmat(::casadi::DM::zeros(stateSize + inputSize, 1), getHorizon());
+    }
 
     // 组装求解器输入
     arg["lbx"] = lbx;
@@ -614,12 +618,17 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &statusF
                     libBlockSQPSolver_ = ::casadi::nlpsol("snopt_solver", "blocksqp", packagePath_ + "/code_gen/BlockSQP_nlp_code.so");
                     res = libIPOPTSolver_(arg);
                     firstTime_ = false;
+                    std::cout<<"暖机完成，已取得当前的全局最优解\n";
                 } else {
-                    res = libIPOPTSolver_(arg);
+                    res = libBlockSQPSolver_(arg);
                 }
             } else {
-                // 使用默认求解器
-                res = IPOPTSolver_(arg);
+                if(firstTime_){
+                    // 使用默认求解器
+                    res = IPOPTSolver_(arg);
+                } else{
+                    res = BlockSQPSolver_(arg);
+                }
             }
             // 3. 输出结果
             std::cout << "\n=================== 优化结果 ===================" << std::endl;
@@ -715,4 +724,20 @@ void OptimalControlProblem::setStatusBounds(const ::casadi::DM& lowerBound, cons
     vec = inputFirstFrame.get_elements(); // 将所有元素复制到
     std::cout << "输出的第一帧是" << vec << std::endl;
     return ::casadi::DM(vec);
+}
+
+/**
+ * @brief 设置优化问题的初始猜测解
+ * @param initialGuess 包含整个预测时域的状态和输入初始值
+ */
+void OptimalControlProblem::setInitialGuess(const ::casadi::DM& initialGuess) {
+    const int expectedDim = horizon_ * (statusFrame_.totalSize + inputFrame_.totalSize);
+
+    if (initialGuess.size1() != expectedDim) {
+        throw std::invalid_argument(
+                "初始猜测维度错误: 输入" + std::to_string(initialGuess.size1()) +
+                "维, 期望" + std::to_string(expectedDim) + "维"
+        );
+    }
+    initialGuess_ = initialGuess;
 }

@@ -32,10 +32,12 @@ private:
     casadi::SX cost_ = 0;
     int horizon_;
     float dt_;
+    ::casadi::DM initialGuess_;
     std::vector<casadi::DM> statusUpperBounds_;
     std::vector<casadi::DM> statusLowerBounds_;
     std::vector<casadi::DM> inputUpperBounds_;
     std::vector<casadi::DM> inputLowerBounds_;
+    bool setInitialGuess_{false};
     bool firstTime_{true};
     ::casadi::DM optimalTrajectory_;
     // OCP问题构建和求解的接口
@@ -93,10 +95,14 @@ private:
     }
 
     static void initializeFrameWithYAML(Frame &frame, const YAML::Node &config);
-    ::casadi::DM getOptimalInputFirstFrame();
 
 public:
+    ::casadi::DM getOptimalInputFirstFrame();
     ::casadi::SX getReference();
+    /*
+     * 设置初始猜测解
+     * */
+    void setInitialGuess(const ::casadi::DM&);
     /*
      * 返回最优解变量，不做计算
      * */
