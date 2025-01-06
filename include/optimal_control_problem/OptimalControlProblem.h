@@ -10,6 +10,7 @@
 /*
  * 负责的内容是构建求解器，求解器的调用应该由子类完成
  * 使用符合规范的YAML文件来初始化
+ * 离散的MPC构建器
  * */
 class OptimalControlProblem {
 private:
@@ -92,11 +93,14 @@ private:
     }
 
     static void initializeFrameWithYAML(Frame &frame, const YAML::Node &config);
+    ::casadi::DM getOptimalInputFirstFrame();
 
 public:
     ::casadi::SX getReference();
-    ::casadi::DM getOptimalInputFirstFrame();
-    casadi::DM getOptimalTrajectory();
+    /*
+     * 返回最优解变量，不做计算
+     * */
+    ::casadi::DM getOptimalTrajectory();
     //    求解功能使用到的变量们
     ::casadi::SX reference_;
 
@@ -111,17 +115,19 @@ public:
      * 把OCP的当前的状态输入到这里，reference的具体的数值发到这里，就行了
      * */
     void computeOptimalTrajectory(const ::casadi::DM &statusFrame, const ::casadi::DM &reference);
-
+    /*
+     * 构造函数
+     * */
     explicit OptimalControlProblem(const std::string &configFilePath);
 
     //    子类在创建变量之间的约束的时候会频繁使用，通过帧的ID和变量的名称拿到SX
-    casadi::SX getStatusVariable(int frameID, const std::string &fieldName) const;
-
+    ::casadi::SX getStatusVariable(int frameID, const std::string &fieldName) const;
     //    子类在创建变量之间的约束的时候会频繁使用，通过帧的ID和变量的名称拿到SX
-    casadi::SX getInputVariable(int frameID, const std::string &fieldName) const;
-
+    ::casadi::SX getInputVariable(int frameID, const std::string &fieldName) const;
+    /*
+     * costFunction是从这里进行
+     * */
     void addCost(const casadi::SX &cost);
-
     /*
      * 添加不等式约束其实是一个通用的函数，是添加等式约束的基础函数
      * */
@@ -138,7 +144,6 @@ public:
 
 //    取得所有帧的状态变量
     casadi::SX getStatusVariables() const;
-
 //    取得所有帧的输入变量
     casadi::SX getInputVariables() const;
 
@@ -169,18 +174,21 @@ public:
     std::vector<casadi::DM> getInputLowerBounds() const;
 
     std::vector<casadi::DM> getInputUpperBounds() const;
-
+    /*
+     * 子类必须实现这个函数添加约束
+     * */
     virtual void deployConstraintsAndAddCost() = 0;
     /*
      * 取得自变量的下界
      * */
     casadi::DM getVariableLowerBounds() const;
-
     /*
      * 取得自变量的上界
      * */
     casadi::DM getVariableUpperBounds() const;
-
+    /*
+     * 取得时间间隔
+     * */
     float getDt() const;
 
 /*
