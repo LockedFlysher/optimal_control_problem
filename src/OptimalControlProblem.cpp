@@ -5,11 +5,7 @@
 #include "optimal_control_problem/OptimalControlProblem.h"
 #include <iostream>
 
-// 通过解析yaml文件，dt、horizon初始化，系统状态、系统输入的帧的变量创建
-//配置文件内需要指定MPC的预测步长和离散时间
-//mpc_options:
-//  dt: 0.08
-//  horizon: 20
+//通过解析yaml文件，初始化dt、horizon,创建系统状态和输入变量
 OptimalControlProblem::OptimalControlProblem(const std::string& configFilePath) {
     configNode_ = YAML::LoadFile(configFilePath);
     if(!configNode_["mpc_options"]["horizon"]){
@@ -22,7 +18,6 @@ OptimalControlProblem::OptimalControlProblem(const std::string& configFilePath) 
     }else{
         dt_ = configNode_["mpc_options"]["dt"].as<float>();
     }
-//    todo: 使用配置文件加载上下界
     parseOCPBounds();
     statusVariables = casadi::SX::sym("X", horizon_ * statusFrame_.totalSize, 1);
     inputVariables = casadi::SX::sym("U", horizon_ * inputFrame_.totalSize, 1);
@@ -173,12 +168,15 @@ void OptimalControlProblem::initializeFrameWithYAML(Frame &frame, const YAML::No
         int fieldSize;
         if(!fieldConfig["name"]){
             throw std::invalid_argument("Field name not found in frame");
-        } else{
+        }
+        else{
             fieldName = fieldConfig["name"].as<std::string>();
         }
-        if(!fieldConfig["size"]){
+        if(!fieldConfig["size"])
+        {
             throw std::invalid_argument("Field size not found in frame");
-        } else if(fieldConfig["size"].as<int>() <= 0){
+        }
+        else if(fieldConfig["size"].as<int>() <= 0){
             throw std::invalid_argument("Field size must be positive: " + fieldName);
         }else{
             fieldSize = fieldConfig["size"].as<int>();
