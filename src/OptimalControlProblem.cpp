@@ -442,7 +442,7 @@ void OptimalControlProblem::genSolver() {
         // 创建求解器
         try {
             IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
-            BlockSQPSolver_ = ::casadi::nlpsol("solver", "blocksqp", nlp, solver_opts);
+            SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
         } catch (const std::exception& e) {
             throw std::runtime_error("Failed to create solvers: " + std::string(e.what()));
         }
@@ -454,13 +454,13 @@ void OptimalControlProblem::genSolver() {
         // 文件路径设置
         const std::string code_dir = packagePath_ + "/code_gen/";
         const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
-        const std::string BlockSQP_solver_file_name = "BlockSQP_nlp_code";
+        const std::string SQP_solver_file_name = "SQP_nlp_code";
         const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
-        const std::string BlockSQP_solver_source_file = BlockSQP_solver_file_name + ".c";
+        const std::string SQP_solver_source_file = SQP_solver_file_name + ".c";
         const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
-        const std::string BlockSQP_target_file = code_dir + BlockSQP_solver_source_file;
+        const std::string SQP_target_file = code_dir + SQP_solver_source_file;
         const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
-        const std::string BlockSQP_shared_lib = code_dir + BlockSQP_solver_file_name + ".so";
+        const std::string SQP_shared_lib = code_dir + SQP_solver_file_name + ".so";
 
         // 确保目标目录存在
         if (std::system(("mkdir -p " + code_dir).c_str()) != 0) {
@@ -470,7 +470,7 @@ void OptimalControlProblem::genSolver() {
         // 生成代码文件
         try {
             IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
-            BlockSQPSolver_.generate_dependencies(BlockSQP_solver_source_file);
+            SQPSolver_.generate_dependencies(SQP_solver_source_file);
         } catch (const std::exception& e) {
             throw std::runtime_error("Failed to generate solver dependencies: " + std::string(e.what()));
         }
@@ -495,7 +495,7 @@ void OptimalControlProblem::genSolver() {
 
         try {
             copyFile(IPOPT_solver_source_file, IPOPT_target_file);
-            copyFile(BlockSQP_solver_source_file, BlockSQP_target_file);
+            copyFile(SQP_solver_source_file, SQP_target_file);
         } catch (const std::exception& e) {
             throw std::runtime_error("File copy failed: " + std::string(e.what()));
         }
@@ -536,7 +536,7 @@ void OptimalControlProblem::genSolver() {
 
         try {
             compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
-            compileLibrary(BlockSQP_target_file, BlockSQP_shared_lib, compile_flags);
+            compileLibrary(SQP_target_file, SQP_shared_lib, compile_flags);
         } catch (const std::exception& e) {
             throw std::runtime_error("Compilation error: " + std::string(e.what()));
         }
@@ -613,19 +613,20 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &statusF
                     saveConstraintsToCSV(packagePath_ + "/log/constraints.csv");
                     // 使用生成的代码求解
                     libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt", packagePath_ + "/code_gen/IPOPT_nlp_code.so");
-                    libBlockSQPSolver_ = ::casadi::nlpsol("snopt_solver", "blocksqp", packagePath_ + "/code_gen/BlockSQP_nlp_code.so");
+                    libSQPSolver_ = ::casadi::nlpsol("snopt_solver", "sqpmethod", packagePath_ + "/code_gen/SQP_nlp_code.so");
                     res = libIPOPTSolver_(arg);
                     firstTime_ = false;
                     std::cout<<"暖机完成，已取得当前的全局最优解\n";
                 } else {
-                    res = libBlockSQPSolver_(arg);
+                    res = libSQPSolver_(arg);
                 }
             } else {
                 if(firstTime_){
                     // 使用默认求解器
                     res = IPOPTSolver_(arg);
                 } else{
-                    res = BlockSQPSolver_(arg);
+                    // res = IPOPTSolver_(arg);
+                    res = SQPSolver_(arg);
                 }
             }
             // 3. 输出结果
