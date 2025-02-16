@@ -613,19 +613,21 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &statusF
                     saveConstraintsToCSV(packagePath_ + "/log/constraints.csv");
                     // 使用生成的代码求解
                     libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt", packagePath_ + "/code_gen/IPOPT_nlp_code.so");
-                    libSQPSolver_ = ::casadi::nlpsol("snopt_solver", "sqpmethod", packagePath_ + "/code_gen/SQP_nlp_code.so");
+                    libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod", packagePath_ + "/code_gen/SQP_nlp_code.so");
                     res = libIPOPTSolver_(arg);
                     firstTime_ = false;
                     std::cout<<"暖机完成，已取得当前的全局最优解\n";
                 } else {
+//                    res = libIPOPTSolver_(arg);
                     res = libSQPSolver_(arg);
                 }
             } else {
                 if(firstTime_){
                     // 使用默认求解器
                     res = IPOPTSolver_(arg);
+                    firstTime_ = false;
                 } else{
-                    // res = IPOPTSolver_(arg);
+//                     res = IPOPTSolver_(arg);
                     res = SQPSolver_(arg);
                 }
             }
