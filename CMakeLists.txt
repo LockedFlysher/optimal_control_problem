@@ -31,6 +31,7 @@ set(dependencies
 # 设置ROS包依赖
 set(parent_packages
         ament_index_cpp
+        sqp_solver_utils
 )
 
 ######################################## 构建目标配置 ########################################
