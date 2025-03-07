@@ -23,7 +23,7 @@ private:
 
     std::unique_ptr<OCPConfig> OCPConfigPtr_;
 
-    casadi::SX cost_ = 0;
+    casadi::SXVector costs_;
     bool setInitialGuess_{false};
     bool firstTime_{true};
     ::casadi::DM optimalTrajectory_;
@@ -95,7 +95,7 @@ public:
     /*
      * OCP创建的时候取得损失函数
      * */
-    casadi::SX getCostFunction() const;
+    casadi::SX getCostFunction();
     casadi::DMVector getConstraintLowerBounds() const;
     casadi::DMVector getConstraintUpperBounds() const;
     /*

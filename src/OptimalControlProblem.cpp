@@ -14,7 +14,8 @@ OptimalControlProblem::OptimalControlProblem(const std::string &configFilePath) 
         throw std::runtime_error("Failed to get package path: " + std::string(e.what()));
     }
     OCPConfigPtr_ = std::make_unique<OCPConfig>();
-    configNode_ = YAML::LoadFile(configFilePath);
+    configNode_ = YAML::LoadFile(
+            ament_index_cpp::get_package_share_directory("optimal_control_problem") + "/config/OCP_config.yaml");
     //    初始化reference
     reference_ = ::casadi::SX::sym("ref", 1);
     genCode_ = configNode_["solver_settings"]["gen_code"].as<bool>();
@@ -26,7 +27,7 @@ OptimalControlProblem::OptimalControlProblem(const std::string &configFilePath) 
 }
 
 void OptimalControlProblem::addCost(const casadi::SX &cost) {
-    cost_ += cost;
+    costs_.push_back(cost);
 }
 
 void OptimalControlProblem::addInequalityConstraint(const std::string &constraintName,
@@ -72,12 +73,18 @@ void OptimalControlProblem::addEquationConstraint(const std::string &constraintN
     addEquationConstraint(constraintName, expression, casadi::SX::zeros(expression.size1()));
 }
 
-casadi::SX OptimalControlProblem::getCostFunction() const { return totalCost_; }
-
+casadi::SX OptimalControlProblem::getCostFunction() {
+    totalCost_ = casadi::SX::zeros(1);
+    for (auto const &cost: costs_) {
+        totalCost_ += cost;
+    }
+    return totalCost_;
+}
 
 /*
  * note : 必需在应用约束和添加损失以后使用！！！！！！！
  * */
+// todo : 需要在这里把问题SQP化，约束线性化，A\B矩阵都要作为参数放到ADMM求解器作为参数，问题就来了，A\B肯定是稀疏的才比较好求啊，
 void OptimalControlProblem::genSolver() {
     try {
         // 设置求解器选项
@@ -113,7 +120,6 @@ void OptimalControlProblem::genSolver() {
         if (!genCode_) {
             return;
         }
-
         // 文件路径设置
         const std::string code_dir = packagePath_ + "/code_gen/";
         const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
@@ -366,12 +372,12 @@ casadi::DM OptimalControlProblem::getOptimalTrajectory() {
 ::casadi::DM OptimalControlProblem::getOptimalInputFirstFrame() {
     // 拿到input的所有帧，再取出第一帧，得到的就是需要发送出去的数据
     ::casadi::DM inputs = optimalTrajectory_(
-            ::casadi::Slice(OCPConfigPtr_-> getHorizon() * OCPConfigPtr_->getStatusFrameSize(), -1, 1));
+            ::casadi::Slice(OCPConfigPtr_->getHorizon() * OCPConfigPtr_->getStatusFrameSize(), -1, 1));
 //            ::casadi::DM inputFirstFrame = inputs(::casadi::Slice(0, inputFrame_.totalSize, 1));
 //            float input = inputFirstFrame(0).scalar();
     std::cout << "输入的所有帧是" << std::endl;
     std::cout << inputs;
-    ::casadi::DM inputFirstFrame = inputs(::casadi::Slice(0,OCPConfigPtr_->getInputFrameSize(), 1));
+    ::casadi::DM inputFirstFrame = inputs(::casadi::Slice(0, OCPConfigPtr_->getInputFrameSize(), 1));
     std::vector<double> vec;
     vec = inputFirstFrame.get_elements(); // 将所有元素复制到
     std::cout << "输出的第一帧是" << vec << std::endl;
