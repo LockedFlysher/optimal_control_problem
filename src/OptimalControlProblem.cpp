@@ -548,7 +548,7 @@ void OptimalControlProblem::genSolver() {
 }
 
 
-::casadi::SX OptimalControlProblem::getReference() {
+::casadi::SX OptimalControlProblem::getReference() const {
     return reference_;
 };
 

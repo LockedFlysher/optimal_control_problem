@@ -98,7 +98,7 @@ private:
 
 public:
     ::casadi::DM getOptimalInputFirstFrame();
-    ::casadi::SX getReference();
+    ::casadi::SX getReference() const;
     /*
      * 设置初始猜测解
      * */
