@@ -34,6 +34,7 @@ OCP_variables:
 
 solver_settings:
   verbose: true
+  gen_code: false
   recompile: false
   load_lib: false
 #  求解器的方案有很多种： IPOPT, ADMM, CUDA_ADMM, SQPMETHOD, MIXED,对应不同的求解方式

@@ -14,10 +14,10 @@ OptimalControlProblem::OptimalControlProblem(const std::string &configFilePath) 
         throw std::runtime_error("Failed to get package path: " + std::string(e.what()));
     }
     OCPConfigPtr_ = std::make_unique<OCPConfig>();
-    configNode_ = YAML::LoadFile(
-            ament_index_cpp::get_package_share_directory("optimal_control_problem") + "/config/OCP_config.yaml");
+
+    configNode_ = YAML::LoadFile(ament_index_cpp::get_package_share_directory("optimal_control_problem") + "/config/OCP_config.yaml");
     //    初始化reference
-    reference_ = ::casadi::SX::sym("ref", 1);
+    reference_ = ::casadi::SX::sym("ref", OCPConfigPtr_->getStatusFrameSize());
     genCode_ = configNode_["solver_settings"]["gen_code"].as<bool>();
     loadLib_ = configNode_["solver_settings"]["load_lib"].as<bool>();
     if (configNode_["solver_settings"]["verbose"].as<bool>()) {
@@ -240,9 +240,9 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &statusF
     // 设置变量和约束的上下界
     ::casadi::DM lbx = OCPConfigPtr_->getVariableLowerBounds();
     ::casadi::DM ubx = OCPConfigPtr_->getVariableUpperBounds();
+    std::cout<<"OCPConfigPtr_->getStatusFrameSize()"<<OCPConfigPtr_->getStatusFrameSize();
     lbx(::casadi::Slice(0, OCPConfigPtr_->getStatusFrameSize())) = statusFrame;
     ubx(::casadi::Slice(0, OCPConfigPtr_->getStatusFrameSize())) = statusFrame;
-
     if (verbose_) {
         std::cout << "变量下界:\n" << lbx << std::endl;
         std::cout << "变量上界:\n" << ubx << std::endl;

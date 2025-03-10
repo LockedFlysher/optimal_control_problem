@@ -18,7 +18,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 ## 设置配置文件路径宏
 #add_definitions(-DCONFIG_FILE_PATH="${CMAKE_CURRENT_SOURCE_DIR}/config/config.yaml")
 ## 设置包路径宏
-#add_definitions(-DPACKAGE_PATH="${CMAKE_CURRENT_SOURCE_DIR}")
+add_definitions(-DPACKAGE_PATH="${CMAKE_CURRENT_SOURCE_DIR}")
 
 ######################################## 依赖项配置 ###########################################
 # 设置第三方库依赖

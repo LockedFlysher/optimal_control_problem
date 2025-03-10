@@ -2,6 +2,24 @@
 // Created by lock on 25-3-7.
 //
 
+// 在文件顶部添加
+#include <iostream>
+#include <iomanip>
+
+// 调试宏，可以根据需要开关
+#define DEBUG_OCP 1
+
+#define OCP_LOG(level, msg) \
+    if (DEBUG_OCP) { \
+        std::cout << "[" << level << "] " << msg << std::endl; \
+    }
+
+#define OCP_ERROR(msg) OCP_LOG("ERROR", msg)
+#define OCP_WARN(msg) OCP_LOG("WARN", msg)
+#define OCP_INFO(msg) OCP_LOG("INFO", msg)
+#define OCP_DEBUG(msg) OCP_LOG("DEBUG", msg)
+
+
 #ifndef BUILD_OCPCONFIG_H
 #define BUILD_OCPCONFIG_H
 

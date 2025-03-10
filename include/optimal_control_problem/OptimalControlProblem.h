@@ -21,8 +21,6 @@ private:
     std::vector<casadi::DM> constraintLowerBounds_;
     std::vector<casadi::DM> constraintUpperBounds_;
 
-    std::unique_ptr<OCPConfig> OCPConfigPtr_;
-
     casadi::SXVector costs_;
     bool setInitialGuess_{false};
     bool firstTime_{true};
@@ -53,8 +51,13 @@ private:
      * */
 
 public:
+    std::unique_ptr<OCPConfig> OCPConfigPtr_;
+
+
+public:
+
     ::casadi::DM getOptimalInputFirstFrame();
-    ::casadi::SX getReference() const;
+    casadi::SX getReference() const;
 
     /*
      * 返回最优解变量，不做计算
