@@ -21,6 +21,19 @@ OptimalControlProblem::OptimalControlProblem(const std::string &configFilePath) 
     reference_ = ::casadi::SX::sym("ref", OCPConfigPtr_->getStatusFrameSize());
     genCode_ = configNode_["solver_settings"]["gen_code"].as<bool>();
     loadLib_ = configNode_["solver_settings"]["load_lib"].as<bool>();
+
+    if(configNode_["solver_settings"]["solve_method"].as<std::string>()=="IPOPT") {
+        setSolverType(SolverType::IPOPT);
+    }
+    if(configNode_["solver_settings"]["solve_method"].as<std::string>()=="MIXED") {
+        setSolverType(SolverType::MIXED);
+    }
+    if(configNode_["solver_settings"]["solve_method"].as<std::string>()=="SQP") {
+        setSolverType(SolverType::SQP);
+    }
+    if(configNode_["solver_settings"]["solve_method"].as<std::string>()=="ADMM") {
+        setSolverType(SolverType::ADMM);
+    }
     if (configNode_["solver_settings"]["verbose"].as<bool>()) {
         std::cout << "输出c代码且编译动态链接库：" << genCode_ << std::endl;
         std::cout << "使用动态链接库对求解器进行加载：" << genCode_ << std::endl;

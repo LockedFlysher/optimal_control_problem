@@ -46,13 +46,6 @@ private:
     casadi::Function libIPOPTSolver_;
     casadi::Function libSQPSolver_;
 
-    enum solverType_{
-        ADMM,
-        IPOPT,
-        SQP,
-        MIXED
-    };
-
 private:
     /*
      * 直接给定所有数据帧的状态变量的上界和下界
