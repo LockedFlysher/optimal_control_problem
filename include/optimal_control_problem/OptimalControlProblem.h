@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <iostream>
 #include <ament_index_cpp/get_package_share_directory.hpp>
-#include "sqp_solver_utils/SQPOptimizationSolver.hpp"
+#include "sqp_solver_utils/SQPOptimizationSolver.h"
 #include "optimal_control_problem/OCP_config/OCPConfig.h"
 /*
  * 负责的内容是构建求解器，求解器的调用应该由子类完成
@@ -32,7 +32,7 @@ private:
     casadi::SXVector costs_;
     bool setInitialGuess_{false};
     bool firstTime_{true};
-    ::casadi::DM optimalTrajectory_;
+    casadi::DM optimalTrajectory_;
     // OCP问题构建和求解的接口
     bool genCode_{false};
     bool loadLib_{false};
@@ -41,10 +41,10 @@ private:
     std::string packagePath_;
 
     SolverType currentSolver_ = SolverType::IPOPT;  // IPOPT是默认的
-    ::casadi::Function IPOPTSolver_;
-    ::casadi::Function SQPSolver_;
-    ::casadi::Function libIPOPTSolver_;
-    ::casadi::Function libSQPSolver_;
+    casadi::Function IPOPTSolver_;
+    casadi::Function SQPSolver_;
+    casadi::Function libIPOPTSolver_;
+    casadi::Function libSQPSolver_;
 
     enum solverType_{
         ADMM,
@@ -62,22 +62,17 @@ public:
     std::unique_ptr<OCPConfig> OCPConfigPtr_;
     // 添加设置求解器类型的方法
     void setSolverType(SolverType type);
-
     SolverType getSolverType() const;
-
-
 public:
-
-    ::casadi::DM getOptimalInputFirstFrame();
+    casadi::DM getOptimalInputFirstFrame();
     casadi::SX getReference() const;
-
     /*
      * 返回最优解变量，不做计算
      * */
-    ::casadi::DM getOptimalTrajectory();
+    casadi::DM getOptimalTrajectory();
     //    求解功能使用到的变量们
-    ::casadi::SX reference_;
-    ::casadi::SX totalCost_;
+    casadi::SX reference_;
+    casadi::SX totalCost_;
 
     /*
      * 根据配置文件决定
@@ -89,7 +84,7 @@ public:
     /*
      * 把OCP的当前的状态输入到这里，reference的具体的数值发到这里，就行了
      * */
-    void computeOptimalTrajectory(const ::casadi::DM &statusFrame, const ::casadi::DM &reference);
+    void computeOptimalTrajectory(const casadi::DM &statusFrame, const casadi::DM &reference);
     /*
      * 构造函数
      * */
@@ -124,7 +119,7 @@ public:
     /*
      * 检查变量的维度
      * */
-    bool solverInputCheck(std::map<std::string, ::casadi::DM> arg) const;
+    bool solverInputCheck(std::map<std::string, casadi::DM> arg) const;
 };
 
 std::ostream &operator<<(std::ostream &os, const OptimalControlProblem &ocp);

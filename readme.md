@@ -41,7 +41,7 @@ casadi::DM getVariableUpperBounds()
 
 #### 添加不等式约束
 ```cpp
-void addInequalityConstraint(
+void setInequalityConstraint(
     const std::string &constraintName,
     const casadi::DM &lowerBound,
     const casadi::SX &expression,
@@ -126,7 +126,7 @@ OptimalControlProblem ocp("config.yaml");
 casadi::DM lb = -1;
 casadi::DM ub = 1;
 casadi::SX expr = getStatusVariable(0, "position");
-ocp.addInequalityConstraint("position_bounds", lb, expr, ub);
+ocp.setInequalityConstraint("position_bounds", lb, expr, ub);
 
 // 添加等式约束
 casadi::SX left = getStatusVariable(1, "position");
