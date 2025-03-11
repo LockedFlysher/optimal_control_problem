@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <iostream>
 #include <ament_index_cpp/get_package_share_directory.hpp>
+#include "sqp_solver_utils/SQPOptimizationSolver.hpp"
 #include "optimal_control_problem/OCP_config/OCPConfig.h"
 /*
  * 负责的内容是构建求解器，求解器的调用应该由子类完成
@@ -14,6 +15,13 @@
  * */
 class OptimalControlProblem {
 private:
+    enum class SolverType {
+        IPOPT,
+        SQP,
+        ADMM,
+        MIXED
+    };
+
     YAML::Node configNode_;
 
     std::vector<casadi::SX> constraints_;
@@ -32,6 +40,7 @@ private:
 
     std::string packagePath_;
 
+    SolverType currentSolver_ = SolverType::IPOPT;  // IPOPT是默认的
     ::casadi::Function IPOPTSolver_;
     ::casadi::Function SQPSolver_;
     ::casadi::Function libIPOPTSolver_;
@@ -39,7 +48,6 @@ private:
 
     enum solverType_{
         ADMM,
-        CUDA_ADMM,
         IPOPT,
         SQP,
         MIXED
@@ -52,6 +60,10 @@ private:
 
 public:
     std::unique_ptr<OCPConfig> OCPConfigPtr_;
+    // 添加设置求解器类型的方法
+    void setSolverType(SolverType type);
+
+    SolverType getSolverType() const;
 
 
 public:

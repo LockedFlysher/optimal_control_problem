@@ -15,7 +15,8 @@ OptimalControlProblem::OptimalControlProblem(const std::string &configFilePath) 
     }
     OCPConfigPtr_ = std::make_unique<OCPConfig>();
 
-    configNode_ = YAML::LoadFile(ament_index_cpp::get_package_share_directory("optimal_control_problem") + "/config/OCP_config.yaml");
+    configNode_ = YAML::LoadFile(
+            ament_index_cpp::get_package_share_directory("optimal_control_problem") + "/config/OCP_config.yaml");
     //    初始化reference
     reference_ = ::casadi::SX::sym("ref", OCPConfigPtr_->getStatusFrameSize());
     genCode_ = configNode_["solver_settings"]["gen_code"].as<bool>();
@@ -81,18 +82,19 @@ casadi::SX OptimalControlProblem::getCostFunction() {
     return totalCost_;
 }
 
+void OptimalControlProblem::setSolverType(SolverType type) {
+    currentSolver_ = type;
+}
+OptimalControlProblem::SolverType OptimalControlProblem::getSolverType() const {
+    return currentSolver_;
+}
+
 /*
  * note : 必需在应用约束和添加损失以后使用！！！！！！！
  * */
 // todo : 需要在这里把问题SQP化，约束线性化，A\B矩阵都要作为参数放到ADMM求解器作为参数，问题就来了，A\B肯定是稀疏的才比较好求啊，
 void OptimalControlProblem::genSolver() {
     try {
-        // 设置求解器选项
-        ::casadi::Dict solver_opts;
-        solver_opts["print_in"] = 0;
-        solver_opts["print_out"] = 0;
-        solver_opts["print_time"] = 0;
-
         // 构建NLP问题
         ::casadi::SX status_vars = OCPConfigPtr_->getStatusVariables();
         ::casadi::SX input_vars = OCPConfigPtr_->getInputVariables();
@@ -111,103 +113,109 @@ void OptimalControlProblem::genSolver() {
         };
         // 创建求解器
         try {
-            IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
-            SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
+            // 设置求解器选项
+            ::casadi::Dict solver_opts;
+            solver_opts["print_in"] = 0;
+            solver_opts["print_out"] = 0;
+            solver_opts["print_time"] = 0;
+            switch (currentSolver_) {
+                case SolverType::IPOPT:{
+                    IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
+                }
+                case SolverType::SQP:{
+                    SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
+                }
+                case SolverType::MIXED:{
+                    IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
+                    SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
+                }
+                case SolverType::ADMM:{
+
+                }
+            }
+
         } catch (const std::exception &e) {
             throw std::runtime_error("Failed to create solvers: " + std::string(e.what()));
         }
-
+//        如果不生成c代码，那么直接返回
         if (!genCode_) {
             return;
-        }
-        // 文件路径设置
-        const std::string code_dir = packagePath_ + "/code_gen/";
-        const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
-        const std::string SQP_solver_file_name = "SQP_nlp_code";
-        const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
-        const std::string SQP_solver_source_file = SQP_solver_file_name + ".c";
-        const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
-        const std::string SQP_target_file = code_dir + SQP_solver_source_file;
-        const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
-        const std::string SQP_shared_lib = code_dir + SQP_solver_file_name + ".so";
-
-        // 确保目标目录存在
-        if (std::system(("mkdir -p " + code_dir).c_str()) != 0) {
-            throw std::runtime_error("Failed to create code generation directory");
-        }
-
-        // 生成代码文件
-        try {
-            IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
-            SQPSolver_.generate_dependencies(SQP_solver_source_file);
-        } catch (const std::exception &e) {
-            throw std::runtime_error("Failed to generate solver dependencies: " + std::string(e.what()));
-        }
-
-        // 复制文件
-        auto copyFile = [](const std::string &src, const std::string &dst) {
-            std::ifstream source(src, std::ios::binary);
-            if (!source) {
-                throw std::runtime_error("Cannot open source file: " + src);
+        } else {
+            // 文件路径设置
+            const std::string code_dir = packagePath_ + "/code_gen/";
+            // 确保目标目录存在
+            if (std::system(("mkdir -p " + code_dir).c_str()) != 0) {
+                throw std::runtime_error("Failed to create code generation directory");
             }
+            // 复制文件
+            auto copyFile = [](const std::string &src, const std::string &dst) {
+                std::ifstream source(src, std::ios::binary);
+                if (!source) {
+                    throw std::runtime_error("Cannot open source file: " + src);
+                }
+                std::ofstream dest(dst, std::ios::binary);
+                if (!dest) {
+                    throw std::runtime_error("Cannot open destination file: " + dst);
+                }
 
-            std::ofstream dest(dst, std::ios::binary);
-            if (!dest) {
-                throw std::runtime_error("Cannot open destination file: " + dst);
+                dest << source.rdbuf();
+                if (!dest) {
+                    throw std::runtime_error("Failed to copy file content from " + src + " to " + dst);
+                }
+            };
+            // 修改后的编译函数，使用 this 指针访问 verbose_
+            auto compileLibrary = [this](const std::string &source_file,
+                                         const std::string &output_file,
+                                         const std::string &compile_flags) {
+                std::string compile_cmd = "gcc " + compile_flags + " " + source_file + " -o " + output_file;
+
+                if (this->verbose_) {
+                    std::cout << "Compiling with command: " << compile_cmd << std::endl;
+                }
+
+                if (std::system(compile_cmd.c_str()) != 0) {
+                    throw std::runtime_error("Compilation failed for " + source_file);
+                }
+
+                if (this->verbose_) {
+                    std::cout << "Successfully compiled " << output_file << std::endl;
+                }
+            };
+            const std::string compile_flags = "-fPIC -shared -O3";
+            // 生成代码文件
+            try {
+                const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
+                const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
+                const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
+                const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
+                IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
+                compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
+                copyFile(IPOPT_solver_source_file, IPOPT_target_file);
+            } catch (const std::exception &e) {
+                throw std::runtime_error("Failed to generate solver dependencies: " + std::string(e.what()));
             }
-
-            dest << source.rdbuf();
-            if (!dest) {
-                throw std::runtime_error("Failed to copy file content from " + src + " to " + dst);
+            // 生成代码文件
+            try {
+                const std::string SQP_solver_file_name = "SQP_nlp_code";
+                const std::string SQP_solver_source_file = SQP_solver_file_name + ".c";
+                const std::string SQP_target_file = code_dir + SQP_solver_source_file;
+                const std::string SQP_shared_lib = code_dir + SQP_solver_file_name + ".so";
+                SQPSolver_.generate_dependencies(SQP_solver_source_file);
+                compileLibrary(SQP_target_file, SQP_shared_lib, compile_flags);
+                copyFile(SQP_solver_source_file, SQP_target_file);
+            } catch (const std::exception &e) {
+                throw std::runtime_error("Failed to generate solver dependencies: " + std::string(e.what()));
             }
-        };
-
-        try {
-            copyFile(IPOPT_solver_source_file, IPOPT_target_file);
-            copyFile(SQP_solver_source_file, SQP_target_file);
-        } catch (const std::exception &e) {
-            throw std::runtime_error("File copy failed: " + std::string(e.what()));
-        }
-
-        // 输出问题规模信息
-        if (verbose_) {
-            const auto num_vars = ::casadi::SX::vertcat({status_vars, input_vars}).size1();
-            const auto num_constraints = constraints.size1();
-            const auto num_params = reference_.size1();
-
-            std::cout << "Problem dimensions:\n"
-                      << "Variables: " << num_vars << "\n"
-                      << "Constraints: " << num_constraints << "\n"
-                      << "Parameters: " << num_params << std::endl;
-        }
-
-        // 编译共享库
-        const std::string compile_flags = "-fPIC -shared -O3";
-
-        // 修改后的编译函数，使用 this 指针访问 verbose_
-        auto compileLibrary = [this](const std::string &source_file,
-                                     const std::string &output_file,
-                                     const std::string &compile_flags) {
-            std::string compile_cmd = "gcc " + compile_flags + " " + source_file + " -o " + output_file;
-
-            if (this->verbose_) {
-                std::cout << "Compiling with command: " << compile_cmd << std::endl;
+            // 输出问题规模信息
+            if (verbose_) {
+                const auto num_vars = ::casadi::SX::vertcat({status_vars, input_vars}).size1();
+                const auto num_constraints = constraints.size1();
+                const auto num_params = reference_.size1();
+                std::cout << "Problem dimensions:\n"
+                          << "Variables: " << num_vars << "\n"
+                          << "Constraints: " << num_constraints << "\n"
+                          << "Parameters: " << num_params << std::endl;
             }
-
-            if (std::system(compile_cmd.c_str()) != 0) {
-                throw std::runtime_error("Compilation failed for " + source_file);
-            }
-
-            if (this->verbose_) {
-                std::cout << "Successfully compiled " << output_file << std::endl;
-            }
-        };
-
-        try {
-            compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
-            compileLibrary(SQP_target_file, SQP_shared_lib, compile_flags);
-        } catch (const std::exception &e) {
-            throw std::runtime_error("Compilation error: " + std::string(e.what()));
         }
 
     } catch (const std::exception &e) {
@@ -240,7 +248,7 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &statusF
     // 设置变量和约束的上下界
     ::casadi::DM lbx = OCPConfigPtr_->getVariableLowerBounds();
     ::casadi::DM ubx = OCPConfigPtr_->getVariableUpperBounds();
-    std::cout<<"OCPConfigPtr_->getStatusFrameSize()"<<OCPConfigPtr_->getStatusFrameSize();
+    std::cout << "OCPConfigPtr_->getStatusFrameSize()" << OCPConfigPtr_->getStatusFrameSize();
     lbx(::casadi::Slice(0, OCPConfigPtr_->getStatusFrameSize())) = statusFrame;
     ubx(::casadi::Slice(0, OCPConfigPtr_->getStatusFrameSize())) = statusFrame;
     if (verbose_) {
@@ -289,17 +297,57 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &statusF
                     firstTime_ = false;
                     std::cout << "暖机完成，已取得当前的全局最优解\n";
                 } else {
-//                    res = libIPOPTSolver_(arg);
-                    res = libSQPSolver_(arg);
+                    // 根据求解器类型选择不同的求解器
+                    switch (currentSolver_) {
+                        case SolverType::IPOPT:
+                            res = libIPOPTSolver_(arg);
+                            break;
+                        case SolverType::SQP:
+                            res = libSQPSolver_(arg);
+                            break;
+                        default:
+                            res = libIPOPTSolver_(arg);  // 默认使用IPOPT
+                            break;
+                    }
                 }
             } else {
                 if (firstTime_) {
-                    // 使用默认求解器
+                    // 根据求解器类型选择不同的求解器
+                    switch (currentSolver_) {
+                        case SolverType::IPOPT:
+                            res = IPOPTSolver_(arg);
+                            break;
+                        case SolverType::SQP:
+                            res = SQPSolver_(arg);
+                            break;
+                        case SolverType::MIXED:
+                            res = IPOPTSolver_(arg);
+                            break;
+                        default:
+                            res = IPOPTSolver_(arg);  // 默认使用IPOPT
+                            break;
+                    }
                     res = IPOPTSolver_(arg);
                     firstTime_ = false;
                 } else {
-//                     res = IPOPTSolver_(arg);
-                    res = SQPSolver_(arg);
+                    // 根据求解器类型选择不同的求解器
+                    switch (currentSolver_) {
+                        case SolverType::IPOPT:
+                            res = IPOPTSolver_(arg);
+                            break;
+                        case SolverType::SQP:
+                            res = SQPSolver_(arg);
+                            break;
+                        case SolverType::MIXED:
+                            res = SQPSolver_(arg);
+                            break;
+                        case SolverType::ADMM:
+//                            todo :使用SQPSolverUtils内的算法求解
+                            break;
+                        default:
+                            res = IPOPTSolver_(arg);  // 默认使用IPOPT
+                            break;
+                    }
                 }
             }
             // 3. 输出结果

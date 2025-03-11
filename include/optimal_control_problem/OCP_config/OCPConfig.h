@@ -49,7 +49,7 @@ private:
     ::casadi::DM initialGuess_;
 
 private:
-    void initializeFrame(Frame &frame, const YAML::Node &config);
+    static void initializeFrame(Frame &frame, const YAML::Node &config);
 
     void parseOCPBounds(YAML::Node);
 
