@@ -38,14 +38,12 @@ class OCPConfig {
 private:
     int horizon_{0};
     double dt_{0.1};
-    casadi::SX statusVariables_, inputVariables_;
-    Frame statusFrame_, inputFrame_;
+    casadi::SX variables_;
     bool verbose_;
     std::string problemName_;
-    std::vector<casadi::DM> statusUpperBounds_;
-    std::vector<casadi::DM> statusLowerBounds_;
-    std::vector<casadi::DM> inputUpperBounds_;
-    std::vector<casadi::DM> inputLowerBounds_;
+    Frame variableFrame_;
+    std::vector<casadi::DM> upperBounds_;
+    std::vector<casadi::DM> lowerBounds_;
     ::casadi::DM initialGuess_;
 
 private:
@@ -53,41 +51,27 @@ private:
 
     void parseOCPBounds(YAML::Node);
 
-    void coverUpperInputBounds(const casadi::SX &oneFrameLowerBound);
+    void coverLowerBounds(const casadi::SX &oneFrameLowerBound);
 
-    void coverUpperStatusBounds(const casadi::SX &oneFrameUpperBound);
-
-    void coverLowerInputBounds(const casadi::SX &oneFrameUpperBound);
-
-    void coverLowerStatusBounds(const casadi::SX &oneFrameLowerBound);
+    void coverUpperBounds(const casadi::SX &oneFrameUpperBound);
 
 
 public:
-    casadi::SX getStatusVariable(int stepID, const std::string &variableName) const;
+    casadi::SX getVariable(int stepID, const std::string &variableName) const;
 
-    casadi::SX getInputVariable(int frameID, const std::string &fieldName) const;
+    casadi::SX getVariables() const;
 
-    casadi::SX getStatusVariables() const;
+    std::vector<casadi::DM> getLowerBounds() const;
 
-    casadi::SX getInputVariables() const;
-
-    std::vector<casadi::DM> getStatusLowerBounds() const;
-
-    std::vector<casadi::DM> getInputLowerBounds() const;
-
-    std::vector<casadi::DM> getStatusUpperBounds() const;
-
-    std::vector<casadi::DM> getInputUpperBounds() const;
+    std::vector<casadi::DM> getUpperBounds() const;
 
     int getHorizon() const;
 
     double getDt() const;
 
-    int getStatusFrameSize() const;
+    int getFrameSize() const;
 
-    int getInputFrameSize() const;
-
-    void setStatusBounds(const ::casadi::DM &lowerBound, const ::casadi::DM &upperBound);
+//    void setStatusBounds(const ::casadi::DM &lowerBound, const ::casadi::DM &upperBound);
 
     void setInitialGuess(const casadi::DM &initialGuess);
 
@@ -96,10 +80,6 @@ public:
     OCPConfig();
 
     ~OCPConfig() = default;
-
-    casadi::DM getVariableLowerBounds() const;
-
-    casadi::DM getVariableUpperBounds() const;
 };
 
 

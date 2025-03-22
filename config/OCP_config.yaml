@@ -3,34 +3,32 @@ problem:
   name: "cartpole"
   dt: 0.05
   horizon:  20
-  verbose: false
+  verbose: true
 
 # 据说是使用.inf就可以在yaml内完成无穷大的设置
 OCP_variables:
-  status_frame:
-    - name: "q"
-      size: 2
-      lower_bound:
-        - -1.0
-        - -.INF
-      upper_bound:
-        - 1.0
-        - .INF
-    - name: "dq"
-      size: 2
-      lower_bound:
-        - -.INF
-        - -.INF
-      upper_bound:
-        - .INF
-        - .INF
-  input_frame:
-    - name: "F"
-      size: 1
-      lower_bound:
-        - -100
-      upper_bound:
-        - 100
+  - name: "q"
+    size: 2
+    lower_bound:
+      - -1.0
+      - -.INF
+    upper_bound:
+      - 1.0
+      - .INF
+  - name: "dq"
+    size: 2
+    lower_bound:
+      - -.INF
+      - -.INF
+    upper_bound:
+      - .INF
+      - .INF
+  - name: "F"
+    size: 1
+    lower_bound:
+      - -100
+    upper_bound:
+      - 100
 
 solver_settings:
   verbose: true

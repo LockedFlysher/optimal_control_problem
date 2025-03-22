@@ -18,20 +18,20 @@ OptimalControlProblem::OptimalControlProblem(const std::string &configFilePath) 
     configNode_ = YAML::LoadFile(
             ament_index_cpp::get_package_share_directory("optimal_control_problem") + "/config/OCP_config.yaml");
     //    初始化reference
-    reference_ = ::casadi::SX::sym("ref", OCPConfigPtr_->getStatusFrameSize());
+    reference_ = ::casadi::SX::sym("ref", OCPConfigPtr_->getFrameSize());
     genCode_ = configNode_["solver_settings"]["gen_code"].as<bool>();
     loadLib_ = configNode_["solver_settings"]["load_lib"].as<bool>();
 
-    if(configNode_["solver_settings"]["solve_method"].as<std::string>()=="IPOPT") {
+    if (configNode_["solver_settings"]["solve_method"].as<std::string>() == "IPOPT") {
         setSolverType(SolverType::IPOPT);
     }
-    if(configNode_["solver_settings"]["solve_method"].as<std::string>()=="MIXED") {
+    if (configNode_["solver_settings"]["solve_method"].as<std::string>() == "MIXED") {
         setSolverType(SolverType::MIXED);
     }
-    if(configNode_["solver_settings"]["solve_method"].as<std::string>()=="SQP") {
+    if (configNode_["solver_settings"]["solve_method"].as<std::string>() == "SQP") {
         setSolverType(SolverType::SQP);
     }
-    if(configNode_["solver_settings"]["solve_method"].as<std::string>()=="ADMM") {
+    if (configNode_["solver_settings"]["solve_method"].as<std::string>() == "ADMM") {
         setSolverType(SolverType::ADMM);
     }
     if (configNode_["solver_settings"]["verbose"].as<bool>()) {
@@ -98,6 +98,7 @@ casadi::SX OptimalControlProblem::getCostFunction() {
 void OptimalControlProblem::setSolverType(SolverType type) {
     currentSolver_ = type;
 }
+
 OptimalControlProblem::SolverType OptimalControlProblem::getSolverType() const {
     return currentSolver_;
 }
@@ -109,9 +110,8 @@ OptimalControlProblem::SolverType OptimalControlProblem::getSolverType() const {
 void OptimalControlProblem::genSolver() {
     try {
         // 构建NLP问题
-        ::casadi::SX status_vars = OCPConfigPtr_->getStatusVariables();
-        ::casadi::SX input_vars = OCPConfigPtr_->getInputVariables();
-        if (status_vars.is_empty() || input_vars.is_empty()) {
+        ::casadi::SX vars = OCPConfigPtr_->getVariables();
+        if (vars.is_empty()) {
             throw std::runtime_error("Status or input variables are empty");
         }
         ::casadi::SX constraints = ::casadi::SX::vertcat(this->getConstraints());
@@ -119,7 +119,7 @@ void OptimalControlProblem::genSolver() {
             throw std::runtime_error("Constraints are empty");
         }
         ::casadi::SXDict nlp = {
-                {"x", ::casadi::SX::vertcat({status_vars, input_vars})},
+                {"x", vars},
                 {"f", getCostFunction()},
                 {"g", constraints},
                 {"p", reference_}
@@ -132,17 +132,17 @@ void OptimalControlProblem::genSolver() {
             solver_opts["print_out"] = 0;
             solver_opts["print_time"] = 0;
             switch (currentSolver_) {
-                case SolverType::IPOPT:{
+                case SolverType::IPOPT: {
                     IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
                 }
-                case SolverType::SQP:{
+                case SolverType::SQP: {
                     SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
                 }
-                case SolverType::MIXED:{
+                case SolverType::MIXED: {
                     IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
                     SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
                 }
-                case SolverType::ADMM:{
+                case SolverType::ADMM: {
 
                 }
             }
@@ -221,7 +221,7 @@ void OptimalControlProblem::genSolver() {
             }
             // 输出问题规模信息
             if (verbose_) {
-                const auto num_vars = ::casadi::SX::vertcat({status_vars, input_vars}).size1();
+                const auto num_vars = vars.size1();
                 const auto num_constraints = constraints.size1();
                 const auto num_params = reference_.size1();
                 std::cout << "Problem dimensions:\n"
@@ -245,13 +245,13 @@ void OptimalControlProblem::genSolver() {
  * 输入当前OCP问题系统的状态，以及参考轨迹，计算出最优轨迹
  * bug : 在调用这个函数的时候，发现求解器接收的constraint的大小是不对的
  * */
-void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &statusFrame, const ::casadi::DM &reference) {
-    if (statusFrame.size1() != OCPConfigPtr_->getStatusFrameSize()) {
-        std::cerr << "优化问题的状态维度不对，收到状态是" << statusFrame.size1() << "维，期望是"
-                  << OCPConfigPtr_->getStatusFrameSize()
+void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, const ::casadi::DM &reference) {
+    if (frame.size1() != OCPConfigPtr_->getFrameSize()) {
+        std::cerr << "优化问题的状态维度不对，收到状态是" << frame.size1() << "维，期望是"
+                  << OCPConfigPtr_->getFrameSize()
                   << "维\n";
     }
-    if (reference.size1() != OCPConfigPtr_->getStatusFrameSize()) {
+    if (reference.size1() != reference_.size1()) {
         std::cerr << "参考轨迹的维度不对，收到参考轨迹是" << reference.size1() << "维，期望是" << reference_.size1()
                   << "维\n";
     }
@@ -259,38 +259,34 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &statusF
     // 1. 准备优化器输入参数
     std::map<std::string, ::casadi::DM> arg, res;
     // 设置变量和约束的上下界
-    ::casadi::DM lbx = OCPConfigPtr_->getVariableLowerBounds();
-    ::casadi::DM ubx = OCPConfigPtr_->getVariableUpperBounds();
-    std::cout << "OCPConfigPtr_->getStatusFrameSize()" << OCPConfigPtr_->getStatusFrameSize();
-    lbx(::casadi::Slice(0, OCPConfigPtr_->getStatusFrameSize())) = statusFrame;
-    ubx(::casadi::Slice(0, OCPConfigPtr_->getStatusFrameSize())) = statusFrame;
+    ::casadi::DM lbx = ::casadi::DM::vertcat(OCPConfigPtr_->getLowerBounds());
+    ::casadi::DM ubx = ::casadi::DM::vertcat(OCPConfigPtr_->getUpperBounds());
+    std::cout << "OCPConfigPtr_->getFrameSize()" << OCPConfigPtr_->getFrameSize();
+    lbx(::casadi::Slice(0, OCPConfigPtr_->getFrameSize())) = frame;
+    ubx(::casadi::Slice(0, OCPConfigPtr_->getFrameSize())) = frame;
     if (verbose_) {
         std::cout << "变量下界:\n" << lbx << std::endl;
         std::cout << "变量上界:\n" << ubx << std::endl;
     }
-
     ::casadi::DM lbg = ::casadi::DM::vertcat({getConstraintLowerBounds()});
     ::casadi::DM ubg = ::casadi::DM::vertcat({getConstraintUpperBounds()});
 
     // 设置初始猜测全都是0
-    const int stateSize = OCPConfigPtr_->getStatusFrameSize();
-    const int inputSize = OCPConfigPtr_->getInputFrameSize();
+    const int variableSize = OCPConfigPtr_->getFrameSize();
 
-    ::casadi::DM x0;
+    ::casadi::DM initialGuess;
     if (setInitialGuess_) {
-        x0 = OCPConfigPtr_->getInitialGuess();
+        initialGuess = OCPConfigPtr_->getInitialGuess();
     } else {
-        x0 = ::casadi::DM::repmat(::casadi::DM::zeros(stateSize + inputSize, 1), OCPConfigPtr_->getHorizon());
+        initialGuess = ::casadi::DM::repmat(::casadi::DM::zeros(variableSize, 1), OCPConfigPtr_->getHorizon());
     }
-
     // 组装求解器输入
     arg["lbx"] = lbx;
     arg["ubx"] = ubx;
     arg["lbg"] = lbg;
     arg["ubg"] = ubg;
-
     if (firstTime_) {
-        arg["x0"] = x0;
+        arg["x0"] = initialGuess;
     } else {
         arg["x0"] = optimalTrajectory_;
     }
@@ -395,9 +391,7 @@ bool OptimalControlProblem::solverInputCheck(std::map<std::string, ::casadi::DM>
         return false;
     }
 
-    int expected_lbx_ubx_x0_size =
-            (OCPConfigPtr_->getStatusFrameSize() + OCPConfigPtr_->getInputFrameSize()) *
-            OCPConfigPtr_->getHorizon();
+    int expected_lbx_ubx_x0_size = OCPConfigPtr_->getVariables().size1();
     if (arg["lbx"].size1() != expected_lbx_ubx_x0_size) {
         printDimensionMismatch("lbx", expected_lbx_ubx_x0_size, arg["lbx"].size1());
         return false;
@@ -411,7 +405,7 @@ bool OptimalControlProblem::solverInputCheck(std::map<std::string, ::casadi::DM>
         return false;
     }
 //    reference的维度就是状态status的维度
-    int expected_p_size = OCPConfigPtr_->getStatusFrameSize();
+    int expected_p_size = OCPConfigPtr_->getFrameSize();
     if (arg["p"].size1() != expected_p_size) {
         printDimensionMismatch("p", expected_p_size, arg["p"].size1());
         return false;
@@ -427,22 +421,6 @@ bool OptimalControlProblem::solverInputCheck(std::map<std::string, ::casadi::DM>
 
 casadi::DM OptimalControlProblem::getOptimalTrajectory() {
     return optimalTrajectory_;
-}
-
-
-::casadi::DM OptimalControlProblem::getOptimalInputFirstFrame() {
-    // 拿到input的所有帧，再取出第一帧，得到的就是需要发送出去的数据
-    ::casadi::DM inputs = optimalTrajectory_(
-            ::casadi::Slice(OCPConfigPtr_->getHorizon() * OCPConfigPtr_->getStatusFrameSize(), -1, 1));
-//            ::casadi::DM inputFirstFrame = inputs(::casadi::Slice(0, inputFrame_.totalSize, 1));
-//            float input = inputFirstFrame(0).scalar();
-    std::cout << "输入的所有帧是" << std::endl;
-    std::cout << inputs;
-    ::casadi::DM inputFirstFrame = inputs(::casadi::Slice(0, OCPConfigPtr_->getInputFrameSize(), 1));
-    std::vector<double> vec;
-    vec = inputFirstFrame.get_elements(); // 将所有元素复制到
-    std::cout << "输出的第一帧是" << vec << std::endl;
-    return ::casadi::DM(vec);
 }
 
 std::vector<casadi::SX> OptimalControlProblem::getConstraints() const {

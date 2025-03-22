@@ -25,7 +25,7 @@ OptimalControlProblem(std::string configFilePath)
 
 #### 状态和输入变量访问
 ```cpp
-casadi::SX getStatusVariable(int frameID, const std::string &fieldName)
+casadi::SX getVariable(int frameID, const std::string &fieldName)
 casadi::SX getInputVariable(int frameID, const std::string &fieldName)
 ```
 - frameID: 时间步索引 (0 到 horizon-1)
@@ -125,18 +125,18 @@ OptimalControlProblem ocp("config.yaml");
 // 添加不等式约束
 casadi::DM lb = -1;
 casadi::DM ub = 1;
-casadi::SX expr = getStatusVariable(0, "position");
+casadi::SX expr = getVariable(0, "position");
 ocp.setInequalityConstraint("position_bounds", lb, expr, ub);
 
 // 添加等式约束
-casadi::SX left = getStatusVariable(1, "position");
-casadi::SX right = getStatusVariable(0, "position");
+casadi::SX left = getVariable(1, "position");
+casadi::SX right = getVariable(0, "position");
 ocp.addEquationConstraint("position_continuity", left, right);
 ```
 
 3. 添加代价函数：
 ```cpp
-casadi::SX cost = pow(getStatusVariable(0, "position"), 2);
+casadi::SX cost = pow(getVariable(0, "position"), 2);
 ocp.addCost(cost);
 ```
 
