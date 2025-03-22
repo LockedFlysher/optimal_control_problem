@@ -36,5 +36,5 @@ solver_settings:
 #  如果是recompile则会在运行时重新生成.so文件
   recompile: false
   load_lib: false
-#  求解器的方案有很多种： IPOPT, ADMM, CUDA_ADMM, SQPMETHOD, MIXED,对应不同的求解方式
+#  求解器的方案有很多种： IPOPT, SQP, CUDA_SQP, MIXED,对应不同的求解方式
   solve_method: MIXED

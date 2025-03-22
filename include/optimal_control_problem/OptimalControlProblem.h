@@ -18,7 +18,7 @@ private:
     enum class SolverType {
         IPOPT,
         SQP,
-        ADMM,
+        CUDA_SQP,
         MIXED
     };
 
@@ -40,11 +40,12 @@ private:
 
     std::string packagePath_;
 
-    SolverType currentSolver_ = SolverType::IPOPT;  // IPOPT是默认的
+    SolverType selectedSolver_ = SolverType::IPOPT;  // IPOPT是默认的
     casadi::Function IPOPTSolver_;
     casadi::Function SQPSolver_;
     casadi::Function libIPOPTSolver_;
     casadi::Function libSQPSolver_;
+    std::shared_ptr<SQPOptimizationSolver> OSQPSolverPtr_;
 
 private:
     /*

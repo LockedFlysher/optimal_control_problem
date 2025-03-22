@@ -31,8 +31,8 @@ OptimalControlProblem::OptimalControlProblem(const std::string &configFilePath) 
     if (configNode_["solver_settings"]["solve_method"].as<std::string>() == "SQP") {
         setSolverType(SolverType::SQP);
     }
-    if (configNode_["solver_settings"]["solve_method"].as<std::string>() == "ADMM") {
-        setSolverType(SolverType::ADMM);
+    if (configNode_["solver_settings"]["solve_method"].as<std::string>() == "CUDA_SQP") {
+        setSolverType(SolverType::CUDA_SQP);
     }
     if (configNode_["solver_settings"]["verbose"].as<bool>()) {
         std::cout << "输出c代码且编译动态链接库：" << genCode_ << std::endl;
@@ -96,11 +96,11 @@ casadi::SX OptimalControlProblem::getCostFunction() {
 }
 
 void OptimalControlProblem::setSolverType(SolverType type) {
-    currentSolver_ = type;
+    selectedSolver_ = type;
 }
 
 OptimalControlProblem::SolverType OptimalControlProblem::getSolverType() const {
-    return currentSolver_;
+    return selectedSolver_;
 }
 
 /*
@@ -131,7 +131,7 @@ void OptimalControlProblem::genSolver() {
             solver_opts["print_in"] = 0;
             solver_opts["print_out"] = 0;
             solver_opts["print_time"] = 0;
-            switch (currentSolver_) {
+            switch (selectedSolver_) {
                 case SolverType::IPOPT: {
                     IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
                 }
@@ -142,8 +142,8 @@ void OptimalControlProblem::genSolver() {
                     IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
                     SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
                 }
-                case SolverType::ADMM: {
-
+                case SolverType::CUDA_SQP: {
+//                    OSQPSolver_ =  SQPOptimizationSolver("solver",nlp,solver_opts);
                 }
             }
 
@@ -302,12 +302,13 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
                                                        packagePath_ + "/code_gen/IPOPT_nlp_code.so");
                     libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
                                                      packagePath_ + "/code_gen/SQP_nlp_code.so");
+
                     res = libIPOPTSolver_(arg);
                     firstTime_ = false;
                     std::cout << "暖机完成，已取得当前的全局最优解\n";
                 } else {
                     // 根据求解器类型选择不同的求解器
-                    switch (currentSolver_) {
+                    switch (selectedSolver_) {
                         case SolverType::IPOPT:
                             res = libIPOPTSolver_(arg);
                             break;
@@ -322,7 +323,7 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
             } else {
                 if (firstTime_) {
                     // 根据求解器类型选择不同的求解器
-                    switch (currentSolver_) {
+                    switch (selectedSolver_) {
                         case SolverType::IPOPT:
                             res = IPOPTSolver_(arg);
                             break;
@@ -340,7 +341,7 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
                     firstTime_ = false;
                 } else {
                     // 根据求解器类型选择不同的求解器
-                    switch (currentSolver_) {
+                    switch (selectedSolver_) {
                         case SolverType::IPOPT:
                             res = IPOPTSolver_(arg);
                             break;
@@ -350,7 +351,7 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
                         case SolverType::MIXED:
                             res = SQPSolver_(arg);
                             break;
-                        case SolverType::ADMM:
+                        case SolverType::CUDA_SQP:
 //                            todo :使用SQPSolverUtils内的算法求解
                             break;
                         default:
