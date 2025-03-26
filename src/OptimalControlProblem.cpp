@@ -143,7 +143,7 @@ void OptimalControlProblem::genSolver() {
                     SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
                 }
                 case SolverType::CUDA_SQP: {
-//                    OSQPSolver_ =  SQPOptimizationSolver("solver",nlp,solver_opts);
+                    OSQPSolverPtr_ =std::make_shared<SQPOptimizationSolver>(nlp);
                 }
             }
 
@@ -352,7 +352,7 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
                             res = SQPSolver_(arg);
                             break;
                         case SolverType::CUDA_SQP:
-//                            res =
+                            res = OSQPSolverPtr_->getOptimalSolution(arg);
                             break;
                         default:
                             res = IPOPTSolver_(arg);  // 默认使用IPOPT
