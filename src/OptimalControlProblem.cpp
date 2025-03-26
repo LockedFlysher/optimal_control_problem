@@ -352,7 +352,7 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
                             res = SQPSolver_(arg);
                             break;
                         case SolverType::CUDA_SQP:
-//                            todo :使用SQPSolverUtils内的算法求解
+//                            res =
                             break;
                         default:
                             res = IPOPTSolver_(arg);  // 默认使用IPOPT

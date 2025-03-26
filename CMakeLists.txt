@@ -26,6 +26,7 @@ set(dependencies
         CASADI      # CasADi优化库
         Eigen3      # Eigen矩阵运算库
         yaml-cpp    # YAML配置文件解析库
+        OsqpEigen
 )
 
 # 设置ROS包依赖
@@ -139,6 +140,7 @@ foreach (TARGET_NAME IN LISTS ALL_TARGETS)
         target_link_libraries(${TARGET_NAME}
                 ${CASADI_LIBRARIES}  # CasADi
                 yaml-cpp             # YAML-CPP
+                OsqpEigen::OsqpEigen
         )
         ament_target_dependencies(${TARGET_NAME} ${parent_packages})
     endif ()
