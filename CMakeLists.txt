@@ -32,7 +32,6 @@ set(dependencies
 # 设置ROS包依赖
 set(parent_packages
         ament_index_cpp
-        sqp_solver_utils
 )
 
 ######################################## 构建目标配置 ########################################
@@ -47,6 +46,7 @@ set(TARGET1 "optimal_control_problem")
 set(${TARGET1}_TYPE "LIBRARY")
 aux_source_directory(src ${TARGET1}_SOURCES)
 aux_source_directory(src/OCP_config ${TARGET1}_SOURCES)
+aux_source_directory(src/sqp_solver ${TARGET1}_SOURCES)
 
 # 将所有目标名称添加到列表中
 set(ALL_TARGETS

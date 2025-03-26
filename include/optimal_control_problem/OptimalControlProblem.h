@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <iostream>
 #include <ament_index_cpp/get_package_share_directory.hpp>
-#include "sqp_solver_utils/SQPOptimizationSolver.h"
+#include "sqp_solver/SQPOptimizationSolver.h"
 #include "optimal_control_problem/OCP_config/OCPConfig.h"
 /*
  * 负责的内容是构建求解器，求解器的调用应该由子类完成
