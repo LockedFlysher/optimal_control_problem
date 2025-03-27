@@ -10,8 +10,6 @@
 using namespace casadi;
 
 SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
-    std::cout << "\n==== SQP优化求解器初始化 ====" << std::endl;
-
     // 必需参数
     if (nlp.find("f") == nlp.end()) {
         throw std::invalid_argument("目标函数'f'未定义");
@@ -52,17 +50,16 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
     localSystemFunction_ = Function("localSystemFunction", {reference, variables, l, u},
                                     {hessian, gradient, linearizedIneqConstraints[0], l_linearized, u_linearized});
     qpSolver_.setDimension(augmentedVariables.size1(), augmentedConstraints.size1());
-    qpSolver_.setVerbosity(true);
+    qpSolver_.setVerbosity(false);
     qpSolver_.setWarmStart(true);
 
     qpSolver_.setAbsoluteTolerance(1e-3);
     qpSolver_.setRelativeTolerance(1e-3);
-    qpSolver_.setMaxIteration(500);
+    qpSolver_.setMaxIteration(50);
     result_ = {
             {"x", DM::zeros(variables.size1())},
             {"f", DM::zeros(1)}
     };
-    std::cout << "\n====初始化完成===\n";
 }
 
 /**
@@ -92,12 +89,9 @@ DMVector SQPOptimizationSolver::getLocalSystem(const DMDict &arg) {
 }
 
 DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
-    std::cout << "\n==== 开始求解最优解 ====" << std::endl;
-    std::cout << "计划迭代步数: " << stepNum_ << std::endl;
 //    auto argCopy = arg;
 
     for (int i = 0; i < stepNum_; ++i) {
-        std::cout << "\n--- 迭代步骤 " << i + 1 << "/" << stepNum_ << " ---" << std::endl;
         DMVector localSystem = getLocalSystem(arg);
         qpSolver_.setVerbosity(true);
         qpSolver_.setSystem(localSystem);
@@ -117,10 +111,8 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
         }
         std::cout << "解更新: " << oldRes << " -> " << result_.at("x") << std::endl;
     }
-    std::cout << "\n==== 优化求解完成 ====" << std::endl;
     std::cout << "最终结果: " << std::endl;
     std::cout << "  x = " << result_.at("x") << std::endl;
     std::cout << "  f = " << result_.at("f") << std::endl;
-
     return result_;
 }

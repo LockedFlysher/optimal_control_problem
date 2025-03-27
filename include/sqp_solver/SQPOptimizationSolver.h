@@ -28,9 +28,9 @@ private:
     std::shared_ptr <AutoDifferentiator> constraintsAutoDifferentiator_;
     CuCaQP qpSolver_;
 
-    int stepNum_{3};
+    int stepNum_{10};
 //    LineSearch使用到的
-    double alpha_{1};
+    double alpha_{0.2};
     DMDict result_;
 
     casadi::DM lowerBounds_;
