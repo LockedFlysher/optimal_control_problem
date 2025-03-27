@@ -30,7 +30,7 @@ private:
 
     int stepNum_{10};
 //    LineSearch使用到的
-    double alpha_{0.2};
+    double alpha_{0.5};
     DMDict result_;
 
     casadi::DM lowerBounds_;
