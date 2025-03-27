@@ -86,6 +86,7 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
             {"x", DM::zeros(variables.size1())},
             {"f", DM::zeros(1)}
     };
+    std::cout<<"\n====初始化完成===\n";
 }
 
 DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {

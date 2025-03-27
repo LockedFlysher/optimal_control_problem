@@ -308,6 +308,9 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
                         case SolverType::SQP:
                             res = libSQPSolver_(arg);
                             break;
+                        case SolverType::CUDA_SQP:
+                            res = OSQPSolverPtr_->getOptimalSolution(arg);
+                            break;
                         default:
                             res = libIPOPTSolver_(arg);  // 默认使用IPOPT
                             break;
@@ -326,11 +329,10 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
                         case SolverType::MIXED:
                             res = IPOPTSolver_(arg);
                             break;
-                        default:
-                            res = IPOPTSolver_(arg);  // 默认使用IPOPT
+                        case SolverType::CUDA_SQP:
+                            res = OSQPSolverPtr_->getOptimalSolution(arg);
                             break;
                     }
-                    res = IPOPTSolver_(arg);
                     firstTime_ = false;
                 } else {
                     // 根据求解器类型选择不同的求解器
@@ -346,9 +348,6 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
                             break;
                         case SolverType::CUDA_SQP:
                             res = OSQPSolverPtr_->getOptimalSolution(arg);
-                            break;
-                        default:
-                            res = IPOPTSolver_(arg);  // 默认使用IPOPT
                             break;
                     }
                 }

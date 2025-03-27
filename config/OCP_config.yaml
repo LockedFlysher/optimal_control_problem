@@ -2,7 +2,7 @@ problem:
   # 预测时间长度为dt*horizon
   name: "cartpole"
   dt: 0.05
-  horizon:  20
+  horizon:  2
   verbose: true
 
 # 据说是使用.inf就可以在yaml内完成无穷大的设置
