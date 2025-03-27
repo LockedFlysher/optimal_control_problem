@@ -22,8 +22,7 @@ bool CuCaQP::setDimension(int numOfVariables, int numOfConstraints) {
 }
 
 bool CuCaQP::setHessianMatrix(const casadi::DM &hessian) {
-    auto hessianMatrix = casadiDMToEigenSparse<OSQPFloat>(hessian);
-
+    hessianMatrix = casadiDMToEigenSparse<OSQPFloat>(hessian);
     if (hessianMatrix.rows() != numOfVariables_ || hessianMatrix.cols() != numOfVariables_) {
         std::cerr << "Error: Hessian matrix dimensions mismatch. Expected "
                   << numOfVariables_ << "x" << numOfVariables_ << std::endl;
@@ -32,18 +31,6 @@ bool CuCaQP::setHessianMatrix(const casadi::DM &hessian) {
     bool result = solver_.data()->setHessianMatrix(hessianMatrix);
     return result;
 }
-
-bool CuCaQP::setHessianMatrix(const Eigen::SparseMatrix<OSQPFloat> &P) {
-    if (P.rows() != numOfVariables_ || P.cols() != numOfVariables_) {
-        std::cerr << "Error: Hessian matrix dimensions mismatch. Expected "
-                  << numOfVariables_ << "x" << numOfVariables_ << std::endl;
-        return false;
-    }
-
-    bool result = solver_.data()->setHessianMatrix(P);
-    return result;
-}
-
 bool CuCaQP::setGradient(const casadi::DM &q) {
     gradient = casadiDMToEigenVector<OSQPFloat>(q);
 
@@ -54,29 +41,6 @@ bool CuCaQP::setGradient(const casadi::DM &q) {
     bool result = solver_.data()->setGradient(gradient);
     return result;
 }
-
-bool CuCaQP::setGradient(const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> &q) {
-    if (q.size() != numOfVariables_) {
-        std::cerr << "Error: Gradient vector size mismatch. Expected " << numOfVariables_ << std::endl;
-        return false;
-    }
-
-    Eigen::VectorXf gradientCopy = q;
-    bool result = solver_.data()->setGradient(gradientCopy);
-    return result;
-}
-
-bool CuCaQP::setLinearConstraintsMatrix(const Eigen::SparseMatrix<OSQPFloat> &A) {
-    if (A.rows() != numOfConstraints_ || A.cols() != numOfVariables_) {
-        std::cerr << "Error: Constraint matrix dimensions mismatch. Expected "
-                  << numOfConstraints_ << "x" << numOfVariables_ << std::endl;
-        return false;
-    }
-
-    bool result = solver_.data()->setLinearConstraintsMatrix(A);
-    return result;
-}
-
 bool CuCaQP::setLinearConstraintsMatrix(const DM &A) {
     auto constraintMatrix = casadiDMToEigenSparse<OSQPFloat>(A);
 
@@ -87,17 +51,6 @@ bool CuCaQP::setLinearConstraintsMatrix(const DM &A) {
     }
 
     bool result = solver_.data()->setLinearConstraintsMatrix(constraintMatrix);
-    return result;
-}
-
-bool CuCaQP::setLowerBound(const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> &l) {
-    if (l.size() != numOfConstraints_) {
-        std::cerr << "Error: Lower bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
-        return false;
-    }
-
-    Eigen::VectorXf lowerBoundCopy = l;
-    bool result = solver_.data()->setLowerBound(lowerBoundCopy);
     return result;
 }
 
@@ -122,14 +75,59 @@ bool CuCaQP::setUpperBound(const casadi::DM &u) {
     return result;
 }
 
-bool CuCaQP::setUpperBound(const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> &u) {
-    if (u.size() != numOfConstraints_) {
-        std::cerr << "Error: Upper bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
+
+bool CuCaQP::updateHessianMatrix(const casadi::DM &hessian) {
+    hessianMatrix = casadiDMToEigenSparse<OSQPFloat>(hessian);
+
+    if (hessianMatrix.rows() != numOfVariables_ || hessianMatrix.cols() != numOfVariables_) {
+        std::cerr << "Error: Hessian matrix dimensions mismatch. Expected "
+                  << numOfVariables_ << "x" << numOfVariables_ << std::endl;
+        return false;
+    }
+    bool result = solver_.updateHessianMatrix(hessianMatrix);
+    return result;
+}
+bool CuCaQP::updateGradient(const casadi::DM &q) {
+    gradient = casadiDMToEigenVector<OSQPFloat>(q);
+
+    if (gradient.size() != numOfVariables_) {
+        std::cerr << "Error: Gradient vector size mismatch. Expected " << numOfVariables_ << std::endl;
+        return false;
+    }
+    bool result = solver_.updateGradient(gradient);
+    return result;
+}
+bool CuCaQP::updateLinearConstraintsMatrix(const DM &A) {
+    linearConstraintMatrix = casadiDMToEigenSparse<OSQPFloat>(A);
+
+    if (linearConstraintMatrix.rows() != numOfConstraints_ || linearConstraintMatrix.cols() != numOfVariables_) {
+        std::cerr << "Error: Constraint matrix dimensions mismatch. Expected "
+                  << numOfConstraints_ << "x" << numOfVariables_ << std::endl;
         return false;
     }
 
-    Eigen::VectorXf upperBoundCopy = u;
-    bool result = solver_.data()->setUpperBound(upperBoundCopy);
+    bool result = solver_.updateLinearConstraintsMatrix(linearConstraintMatrix);
+    return result;
+}
+
+bool CuCaQP::updateLowerBound(casadi::DM &l) {
+    lowerBound = casadiDMToEigenVector<OSQPFloat>(l);
+    if (lowerBound.size() != numOfConstraints_) {
+        std::cerr << "Error: Lower bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
+        return false;
+    }
+    bool result = solver_.updateLowerBound(lowerBound);
+    return result;
+}
+
+bool CuCaQP::updateUpperBound(const casadi::DM &u) {
+    upperBound = casadiDMToEigenVector<OSQPFloat>(u);
+
+    if (upperBound.size() != numOfConstraints_) {
+        std::cerr << "Error: Upper bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
+        return false;
+    }
+    bool result = solver_.updateUpperBound(upperBound);
     return result;
 }
 
@@ -182,7 +180,6 @@ Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> CuCaQP::getSolution() {
 }
 
 casadi::DM CuCaQP::getSolutionAsDM() {
-    solver_.solveProblem();
     Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> solution_float = solver_.getSolution();
     DM solution = DM::zeros(solution_float.rows(), solution_float.cols());
     for (int i = 0; i < solution_float.rows(); ++i) {
@@ -191,7 +188,6 @@ casadi::DM CuCaQP::getSolutionAsDM() {
     solver_.clearSolver();
     solver_.data()->clearHessianMatrix();
     solver_.data()->clearLinearConstraintsMatrix();
-
     return solution;
 }
 
@@ -239,4 +235,98 @@ void CuCaQP::printSolverData() {
             std::cout << "(" << i << "," << j << "): " << val << std::endl;
         }
     }
+}
+
+void CuCaQP::setSystem(DMVector localSystem) {
+    static bool firstTime{true};
+    if(firstTime){
+        setHessianMatrix(localSystem[0]);
+        setGradient(localSystem[1]);
+        setLinearConstraintsMatrix(localSystem[2]);
+        setLowerBound(localSystem[3]);
+        setUpperBound(localSystem[4]);
+//        std::cout<<"=== 第一次设置得到的参数 === \n";
+//        const auto& hessianMatrix = solver_.data()->getData()->P;
+//        const auto& gradientVector = solver_.data()->getData()->q;
+//        const auto& constraintMatrix = solver_.data()->getData()->A;
+//        const auto& lowerBound = solver_.data()->getData()->l;
+//        const auto& upperBound = solver_.data()->getData()->u;
+
+//        firstTime = false;
+    } else{
+        updateHessianMatrix(localSystem[0]);
+        updateGradient(localSystem[1]);
+        updateLinearConstraintsMatrix(localSystem[2]);
+        updateLowerBound(localSystem[3]);
+        updateUpperBound(localSystem[4]);
+
+        std::cout<<"=== 更新后测参数 === \n";
+        /*
+         *
+         *     OSQPCscMatrix* P; ///< the upper triangular part of the quadratic objective matrix P (size n x n).
+    OSQPCscMatrix* A; ///< linear constraints matrix A (size m x n)
+    OSQPFloat* q; ///< dense array for linear part of objective function (size n)
+    OSQPFloat* l; ///< dense array for lower bound (size m)
+    OSQPFloat* u; ///< dense array for upper bound (size m)*/
+        std::cout<<"Hessian : "<<solver_.data()->getData()->P;
+        std::cout<<"Gradient : "<<solver_.data()->getData()->q;
+        std::cout<<"A : "<<solver_.data()->getData()->A;
+        std::cout<<"l : "<<solver_.data()->getData()->l;
+        std::cout<<"u : "<<solver_.data()->getData()->u<<std::endl;
+    }
+}
+
+
+//##################################### 暂时用不上的函数 ##################################################
+bool CuCaQP::setHessianMatrix(const Eigen::SparseMatrix<OSQPFloat> &P) {
+    if (P.rows() != numOfVariables_ || P.cols() != numOfVariables_) {
+        std::cerr << "Error: Hessian matrix dimensions mismatch. Expected "
+                  << numOfVariables_ << "x" << numOfVariables_ << std::endl;
+        return false;
+    }
+
+    bool result = solver_.data()->setHessianMatrix(P);
+    return result;
+}
+bool CuCaQP::setGradient(const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> &q) {
+    if (q.size() != numOfVariables_) {
+        std::cerr << "Error: Gradient vector size mismatch. Expected " << numOfVariables_ << std::endl;
+        return false;
+    }
+
+    Eigen::VectorXf gradientCopy = q;
+    bool result = solver_.data()->setGradient(gradientCopy);
+    return result;
+}
+
+bool CuCaQP::setLinearConstraintsMatrix(const Eigen::SparseMatrix<OSQPFloat> &A) {
+    if (A.rows() != numOfConstraints_ || A.cols() != numOfVariables_) {
+        std::cerr << "Error: Constraint matrix dimensions mismatch. Expected "
+                  << numOfConstraints_ << "x" << numOfVariables_ << std::endl;
+        return false;
+    }
+
+    bool result = solver_.data()->setLinearConstraintsMatrix(A);
+    return result;
+}
+
+bool CuCaQP::setLowerBound(const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> &l) {
+    if (l.size() != numOfConstraints_) {
+        std::cerr << "Error: Lower bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
+        return false;
+    }
+
+    Eigen::VectorXf lowerBoundCopy = l;
+    bool result = solver_.data()->setLowerBound(lowerBoundCopy);
+    return result;
+}
+
+bool CuCaQP::setUpperBound(const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> &u) {
+    if (u.size() != numOfConstraints_) {
+        std::cerr << "Error: Upper bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
+        return false;
+    }
+    Eigen::VectorXf upperBoundCopy = u;
+    bool result = solver_.data()->setUpperBound(upperBoundCopy);
+    return result;
 }

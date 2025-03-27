@@ -121,14 +121,28 @@ public:
 
     DM getSolutionAsDM();
 
+    void setSystem(DMVector vector1);
+
 private:
     Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> upperBound;
     Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> lowerBound;
     Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> gradient;
+    Eigen::SparseMatrix<OSQPFloat> hessianMatrix;
+    Eigen::SparseMatrix<OSQPFloat> linearConstraintMatrix;
     OsqpEigen::Solver solver_;
     int numOfVariables_;
     int numOfConstraints_;
     bool isInitialized_;
+
+    bool updateHessianMatrix(const DM &hessian);
+
+    bool updateGradient(const DM &q);
+
+    bool updateLinearConstraintsMatrix(const DM &A);
+
+    bool updateLowerBound(DM &l);
+
+    bool updateUpperBound(const DM &u);
 };
 
 #endif // CUCAQP_H

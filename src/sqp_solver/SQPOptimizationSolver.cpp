@@ -47,15 +47,16 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
     auto numOfConstraints = linearizedIneqConstraints[1].size1();
     auto l = SX::sym("l", numOfConstraints);
     auto u = SX::sym("u", numOfConstraints);
-    auto l_linearized = l - linearizedIneqConstraints[1];
-    auto u_linearized = u - linearizedIneqConstraints[1];
+    auto l_linearized = l + linearizedIneqConstraints[1];
+    auto u_linearized = u + linearizedIneqConstraints[1];
     localSystemFunction_ = Function("localSystemFunction", {reference, variables, l, u},
                                     {hessian, gradient, linearizedIneqConstraints[0], l_linearized, u_linearized});
     qpSolver_.setDimension(augmentedVariables.size1(), augmentedConstraints.size1());
     qpSolver_.setVerbosity(true);
     qpSolver_.setWarmStart(true);
-    qpSolver_.setAbsoluteTolerance(1e-4);
-    qpSolver_.setRelativeTolerance(1e-4);
+
+    qpSolver_.setAbsoluteTolerance(1e-3);
+    qpSolver_.setRelativeTolerance(1e-3);
     qpSolver_.setMaxIteration(500);
     result_ = {
             {"x", DM::zeros(variables.size1())},
@@ -72,7 +73,6 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
 */
 
 DMVector SQPOptimizationSolver::getLocalSystem(const DMDict &arg) {
-    std::cout << localSystemFunction_;
     DM lbx = arg.at("lbx");
     DM ubx = arg.at("ubx");
     DM lbg = arg.at("lbg");
@@ -86,22 +86,23 @@ DMVector SQPOptimizationSolver::getLocalSystem(const DMDict &arg) {
 
     DMVector localSystem = localSystemFunction_(
             DMVector{p, result_.at("x"), DM::vertcat({p, lbx, lbg}), DM::vertcat({p, ubx, ubg})});
+    std::cout << localSystem;
+
     return localSystem;
 }
 
 DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
     std::cout << "\n==== 开始求解最优解 ====" << std::endl;
     std::cout << "计划迭代步数: " << stepNum_ << std::endl;
+//    auto argCopy = arg;
 
     for (int i = 0; i < stepNum_; ++i) {
         std::cout << "\n--- 迭代步骤 " << i + 1 << "/" << stepNum_ << " ---" << std::endl;
         DMVector localSystem = getLocalSystem(arg);
-        qpSolver_.setHessianMatrix(localSystem[0]);
-        qpSolver_.setGradient(localSystem[1]);
-        qpSolver_.setLinearConstraintsMatrix(localSystem[2]);
-        qpSolver_.setLowerBound(localSystem[3]);
-        qpSolver_.setUpperBound(localSystem[4]);
+        qpSolver_.setVerbosity(true);
+        qpSolver_.setSystem(localSystem);
         qpSolver_.initSolver();
+        qpSolver_.solve();
         DM solution = qpSolver_.getSolutionAsDM();
         DM oldRes = result_.at("x");
         if (arg.find("p") == arg.end()) {
