@@ -8,6 +8,7 @@
  * 最小单步求解示例
  * */
 using namespace casadi;
+
 SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
     std::cout << "\n==== SQP优化求解器初始化 ====" << std::endl;
 
@@ -60,8 +61,9 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
             {"x", DM::zeros(variables.size1())},
             {"f", DM::zeros(1)}
     };
-    std::cout<<"\n====初始化完成===\n";
+    std::cout << "\n====初始化完成===\n";
 }
+
 /**
 * @brief 输入的arg保持和原来一致
 * @note None
@@ -70,20 +72,20 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
 */
 
 DMVector SQPOptimizationSolver::getLocalSystem(const DMDict &arg) {
-    std::cout<<localSystemFunction_;
+    std::cout << localSystemFunction_;
     DM lbx = arg.at("lbx");
     DM ubx = arg.at("ubx");
     DM lbg = arg.at("lbg");
     DM ubg = arg.at("ubg");
     DM p = DM::zeros();
-    if (arg.find("p") == arg.end()){
+    if (arg.find("p") == arg.end()) {
         DM p = DM::zeros();
-    } else{
+    } else {
         p = arg.at("p");
     }
 
     DMVector localSystem = localSystemFunction_(
-            DMVector{p, result_.at("x"), DM::vertcat({p,lbx, lbg}), DM::vertcat({p,ubx, ubg})});
+            DMVector{p, result_.at("x"), DM::vertcat({p, lbx, lbg}), DM::vertcat({p, ubx, ubg})});
     return localSystem;
 }
 
@@ -102,14 +104,14 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
         qpSolver_.initSolver();
         DM solution = qpSolver_.getSolutionAsDM();
         DM oldRes = result_.at("x");
-        if(arg.find("p")==arg.end()){
-            result_.at("x")+=alpha_*solution;
-        } else{
-            if (arg.at("p").size1()==0){
-                result_.at("x")+=alpha_*solution;
-            } else{
-                result_.at("x") += alpha_ * solution(Slice(arg.at("p").size1(),arg.at("p").size1()+arg.at("x").size1()));
-
+        if (arg.find("p") == arg.end()) {
+            result_.at("x") += alpha_ * solution;
+        } else {
+            if (arg.at("p").size1() == 0) {
+                result_.at("x") += alpha_ * solution;
+            } else {
+                result_.at("x") +=
+                        alpha_ * solution(Slice(arg.at("p").size1(), solution.size1()));
             }
         }
         std::cout << "解更新: " << oldRes << " -> " << result_.at("x") << std::endl;
