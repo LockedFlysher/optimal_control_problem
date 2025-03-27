@@ -48,9 +48,17 @@ aux_source_directory(src ${TARGET1}_SOURCES)
 aux_source_directory(src/OCP_config ${TARGET1}_SOURCES)
 aux_source_directory(src/sqp_solver ${TARGET1}_SOURCES)
 
+set(TARGET2 "test_sqp")
+set(${TARGET2}_TYPE "EXECUTABLE")
+aux_source_directory(src ${TARGET2}_SOURCES)
+aux_source_directory(src/OCP_config ${TARGET2}_SOURCES)
+aux_source_directory(src/sqp_solver ${TARGET2}_SOURCES)
+aux_source_directory(test ${TARGET2}_SOURCES)
+
 # 将所有目标名称添加到列表中
 set(ALL_TARGETS
         ${TARGET1}
+        ${TARGET2}
         # 在此添加更多目标
 )
 

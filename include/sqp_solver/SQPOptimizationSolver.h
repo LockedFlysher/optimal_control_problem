@@ -34,12 +34,6 @@ private:
     double alpha_{0.5};
     DMDict result_;
 
-
-    casadi::SX variables_;
-    casadi::SX reference_;
-    casadi::SX objectExpr_;
-    //    l<=AX<=u
-    casadi::SX constraints_;
     casadi::DM lowerBounds_;
     casadi::DM upperBounds_;
 
