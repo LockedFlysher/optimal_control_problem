@@ -2,6 +2,7 @@
 
 #include "sqp_solver/AutoDifferentiator.h"
 #include "sqp_solver/CuCaQP.h"
+#include <yaml-cpp/yaml.h>
 #include "ament_index_cpp/get_package_share_directory.hpp"
 
 class SQPOptimizationSolver {
@@ -28,9 +29,9 @@ private:
     std::shared_ptr <AutoDifferentiator> constraintsAutoDifferentiator_;
     CuCaQP qpSolver_;
 
-    int stepNum_{10};
+    int stepNum_;
 //    LineSearch使用到的
-    double alpha_{0.5};
+    double alpha_;
     DMDict result_;
 
     casadi::DM lowerBounds_;

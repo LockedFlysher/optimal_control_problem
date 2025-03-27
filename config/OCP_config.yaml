@@ -4,6 +4,8 @@ problem:
   dt: 0.05
   horizon:  20
   verbose: true
+  SQP_step: 10
+  ADMM_step: 0.5
 
 # 据说是使用.inf就可以在yaml内完成无穷大的设置
 OCP_variables:

@@ -3,6 +3,10 @@
 //
 #include "sqp_solver/SQPOptimizationSolver.h"
 #include <iostream>
+// #include "../../../../../../../../opt/ros/humble/include/rclcpp/rclcpp/rclcpp.hpp"
+// #include "../../../../../../../../opt/ros/humble/include/rclcpp/rclcpp/logging.hpp"
+
+
 
 /*
  * 最小单步求解示例
@@ -10,6 +14,20 @@
 using namespace casadi;
 
 SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
+    //加载SQP和ADMM的参数
+    auto path = ament_index_cpp::get_package_share_directory("optimal_control_problem");
+    if (path.empty()){
+        //替换成自己的绝对路径
+        std::cout<<"No path to optimal_control_problem"<<std::endl;
+        path = "/home/andew/project/NEBULA_ws/src/CasADi-OptimalControlProblem";
+    }
+    YAML::Node config = YAML::LoadFile(path+"/config/OCP_config.yaml");
+    stepNum_ = config["problem"]["SQP_step"].as<int>();
+    alpha_ = config["problem"]["ADMM_step"].as<double>();
+    std::cout<<"stepNum_"<< stepNum_ <<std::endl;
+    std::cout<<"stepNum_"<< alpha_ <<std::endl;
+
+
     // 必需参数
     if (nlp.find("f") == nlp.end()) {
         throw std::invalid_argument("目标函数'f'未定义");
