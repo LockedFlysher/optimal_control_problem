@@ -10,7 +10,7 @@ find_package(ament_cmake REQUIRED)
 
 ######################################## 基础构建设置 ###########################################
 # 设置构建类型为RelWithDebInfo（带调试信息的发布版本）
-set(CMAKE_BUILD_TYPE RelWithDebInfo)
+set(CMAKE_BUILD_TYPE Debug)
 # 导出编译命令，用于IDE和工具的代码补全
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 

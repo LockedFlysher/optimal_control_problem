@@ -108,132 +108,125 @@ OptimalControlProblem::SolverType OptimalControlProblem::getSolverType() const {
  * */
 // todo : 需要在这里把问题SQP化，约束线性化，A\B矩阵都要作为参数放到ADMM求解器作为参数，问题就来了，A\B肯定是稀疏的才比较好求啊，
 void OptimalControlProblem::genSolver() {
-    try {
-        // 构建NLP问题
-        ::casadi::SX vars = OCPConfigPtr_->getVariables();
-        if (vars.is_empty()) {
-            throw std::runtime_error("Status or input variables are empty");
+    // 构建NLP问题
+    ::casadi::SX vars = OCPConfigPtr_->getVariables();
+    if (vars.is_empty()) {
+        throw std::runtime_error("Status or input variables are empty");
+    }
+    ::casadi::SX constraints = ::casadi::SX::vertcat(this->getConstraints());
+    if (constraints.is_empty()) {
+        throw std::runtime_error("Constraints are empty");
+    }
+    ::casadi::SXDict nlp = {
+            {"x", vars},
+            {"f", getCostFunction()},
+            {"g", constraints},
+            {"p", reference_}
+    };
+    // 设置求解器选项
+    ::casadi::Dict solver_opts;
+    solver_opts["print_in"] = 0;
+    solver_opts["print_out"] = 0;
+    solver_opts["print_time"] = 0;
+    switch (selectedSolver_) {
+        case SolverType::IPOPT: {
+            IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
+            break;
         }
-        ::casadi::SX constraints = ::casadi::SX::vertcat(this->getConstraints());
-        if (constraints.is_empty()) {
-            throw std::runtime_error("Constraints are empty");
+        case SolverType::SQP: {
+            SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
+            break;
         }
-        ::casadi::SXDict nlp = {
-                {"x", vars},
-                {"f", getCostFunction()},
-                {"g", constraints},
-                {"p", reference_}
-        };
-        // 创建求解器
-        try {
-            // 设置求解器选项
-            ::casadi::Dict solver_opts;
-            solver_opts["print_in"] = 0;
-            solver_opts["print_out"] = 0;
-            solver_opts["print_time"] = 0;
-            switch (selectedSolver_) {
-                case SolverType::IPOPT: {
-                    IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
-                }
-                case SolverType::SQP: {
-                    SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
-                }
-                case SolverType::MIXED: {
-                    IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
-                    SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
-                }
-                case SolverType::CUDA_SQP: {
-                    OSQPSolverPtr_ =std::make_shared<SQPOptimizationSolver>(nlp);
-                }
-            }
+        case SolverType::MIXED: {
+            IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
+            SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
+            break;
+        }
+        case SolverType::CUDA_SQP: {
+            OSQPSolverPtr_ = std::make_shared<SQPOptimizationSolver>(nlp);
+            break;
+        }
+    }
 
-        } catch (const std::exception &e) {
-            throw std::runtime_error("Failed to create solvers: " + std::string(e.what()));
-        }
 //        如果不生成c代码，那么直接返回
-        if (!genCode_) {
-            return;
-        } else {
-            // 文件路径设置
-            const std::string code_dir = packagePath_ + "/code_gen/";
-            // 确保目标目录存在
-            if (std::system(("mkdir -p " + code_dir).c_str()) != 0) {
-                throw std::runtime_error("Failed to create code generation directory");
-            }
-            // 复制文件
-            auto copyFile = [](const std::string &src, const std::string &dst) {
-                std::ifstream source(src, std::ios::binary);
-                if (!source) {
-                    throw std::runtime_error("Cannot open source file: " + src);
-                }
-                std::ofstream dest(dst, std::ios::binary);
-                if (!dest) {
-                    throw std::runtime_error("Cannot open destination file: " + dst);
-                }
-
-                dest << source.rdbuf();
-                if (!dest) {
-                    throw std::runtime_error("Failed to copy file content from " + src + " to " + dst);
-                }
-            };
-            // 修改后的编译函数，使用 this 指针访问 verbose_
-            auto compileLibrary = [this](const std::string &source_file,
-                                         const std::string &output_file,
-                                         const std::string &compile_flags) {
-                std::string compile_cmd = "gcc " + compile_flags + " " + source_file + " -o " + output_file;
-
-                if (this->verbose_) {
-                    std::cout << "Compiling with command: " << compile_cmd << std::endl;
-                }
-
-                if (std::system(compile_cmd.c_str()) != 0) {
-                    throw std::runtime_error("Compilation failed for " + source_file);
-                }
-
-                if (this->verbose_) {
-                    std::cout << "Successfully compiled " << output_file << std::endl;
-                }
-            };
-            const std::string compile_flags = "-fPIC -shared -O3";
-            // 生成代码文件
-            try {
-                const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
-                const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
-                const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
-                const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
-                IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
-                compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
-                copyFile(IPOPT_solver_source_file, IPOPT_target_file);
-            } catch (const std::exception &e) {
-                throw std::runtime_error("Failed to generate solver dependencies: " + std::string(e.what()));
-            }
-            // 生成代码文件
-            try {
-                const std::string SQP_solver_file_name = "SQP_nlp_code";
-                const std::string SQP_solver_source_file = SQP_solver_file_name + ".c";
-                const std::string SQP_target_file = code_dir + SQP_solver_source_file;
-                const std::string SQP_shared_lib = code_dir + SQP_solver_file_name + ".so";
-                SQPSolver_.generate_dependencies(SQP_solver_source_file);
-                compileLibrary(SQP_target_file, SQP_shared_lib, compile_flags);
-                copyFile(SQP_solver_source_file, SQP_target_file);
-            } catch (const std::exception &e) {
-                throw std::runtime_error("Failed to generate solver dependencies: " + std::string(e.what()));
-            }
-            // 输出问题规模信息
-            if (verbose_) {
-                const auto num_vars = vars.size1();
-                const auto num_constraints = constraints.size1();
-                const auto num_params = reference_.size1();
-                std::cout << "Problem dimensions:\n"
-                          << "Variables: " << num_vars << "\n"
-                          << "Constraints: " << num_constraints << "\n"
-                          << "Parameters: " << num_params << std::endl;
-            }
+    if (!genCode_) {
+        return;
+    } else {
+        // 文件路径设置
+        const std::string code_dir = packagePath_ + "/code_gen/";
+        // 确保目标目录存在
+        if (std::system(("mkdir -p " + code_dir).c_str()) != 0) {
+            throw std::runtime_error("Failed to create code generation directory");
         }
+        // 复制文件
+        auto copyFile = [](const std::string &src, const std::string &dst) {
+            std::ifstream source(src, std::ios::binary);
+            if (!source) {
+                throw std::runtime_error("Cannot open source file: " + src);
+            }
+            std::ofstream dest(dst, std::ios::binary);
+            if (!dest) {
+                throw std::runtime_error("Cannot open destination file: " + dst);
+            }
 
-    } catch (const std::exception &e) {
-        std::cerr << "Error in genSolver: " << e.what() << std::endl;
-        throw; // 重新抛出异常以允许上层处理
+            dest << source.rdbuf();
+            if (!dest) {
+                throw std::runtime_error("Failed to copy file content from " + src + " to " + dst);
+            }
+        };
+        // 修改后的编译函数，使用 this 指针访问 verbose_
+        auto compileLibrary = [this](const std::string &source_file,
+                                     const std::string &output_file,
+                                     const std::string &compile_flags) {
+            std::string compile_cmd = "gcc " + compile_flags + " " + source_file + " -o " + output_file;
+
+            if (this->verbose_) {
+                std::cout << "Compiling with command: " << compile_cmd << std::endl;
+            }
+
+            if (std::system(compile_cmd.c_str()) != 0) {
+                throw std::runtime_error("Compilation failed for " + source_file);
+            }
+
+            if (this->verbose_) {
+                std::cout << "Successfully compiled " << output_file << std::endl;
+            }
+        };
+        const std::string compile_flags = "-fPIC -shared -O3";
+        // 生成代码文件
+        try {
+            const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
+            const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
+            const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
+            const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
+            IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
+            compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
+            copyFile(IPOPT_solver_source_file, IPOPT_target_file);
+        } catch (const std::exception &e) {
+            throw std::runtime_error("Failed to generate solver dependencies: " + std::string(e.what()));
+        }
+        // 生成代码文件
+        try {
+            const std::string SQP_solver_file_name = "SQP_nlp_code";
+            const std::string SQP_solver_source_file = SQP_solver_file_name + ".c";
+            const std::string SQP_target_file = code_dir + SQP_solver_source_file;
+            const std::string SQP_shared_lib = code_dir + SQP_solver_file_name + ".so";
+            SQPSolver_.generate_dependencies(SQP_solver_source_file);
+            compileLibrary(SQP_target_file, SQP_shared_lib, compile_flags);
+            copyFile(SQP_solver_source_file, SQP_target_file);
+        } catch (const std::exception &e) {
+            throw std::runtime_error("Failed to generate solver dependencies: " + std::string(e.what()));
+        }
+        // 输出问题规模信息
+        if (verbose_) {
+            const auto num_vars = vars.size1();
+            const auto num_constraints = constraints.size1();
+            const auto num_params = reference_.size1();
+            std::cout << "Problem dimensions:\n"
+                      << "Variables: " << num_vars << "\n"
+                      << "Constraints: " << num_constraints << "\n"
+                      << "Parameters: " << num_params << std::endl;
+        }
     }
 }
 

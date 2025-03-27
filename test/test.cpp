@@ -16,7 +16,8 @@ void test_all_qp_cases() {
         auto nlp = SXDict{
                 {"x", xs},
                 {"f", obj},
-                {"g", SX()}  // 无约束
+                {"g", SX()}  ,// 无约束
+                {"p", SX()}
         };
         SQPOptimizationSolver solver(nlp);
 

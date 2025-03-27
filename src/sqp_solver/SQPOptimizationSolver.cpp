@@ -61,10 +61,11 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
     } else {
         reference = ::casadi::SX();  // 假设空SX表示未定义
     }
+
     auto augmentedVariables = SX::vertcat({reference, variables});
     objectiveFunctionAutoDifferentiatorPtr_ = std::make_shared<AutoDifferentiator>(augmentedVariables, objectExpr);
     SX augmentedConstraints = SX::vertcat({reference, variables, constraints});
-    constraintsAutoDifferentiator_ = std::make_shared<AutoDifferentiator>(variables, augmentedConstraints);
+    constraintsAutoDifferentiator_ = std::make_shared<AutoDifferentiator>(augmentedVariables, augmentedConstraints);
     auto hessian = objectiveFunctionAutoDifferentiatorPtr_->getHessian(augmentedVariables);
     auto gradient = objectiveFunctionAutoDifferentiatorPtr_->getGradient(augmentedVariables);
     auto linearizedIneqConstraints = constraintsAutoDifferentiator_->getLinearization(augmentedVariables);
