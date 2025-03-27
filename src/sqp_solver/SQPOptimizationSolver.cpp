@@ -3,8 +3,7 @@
 //
 #include "sqp_solver/SQPOptimizationSolver.h"
 #include <iostream>
-// #include "../../../../../../../../opt/ros/humble/include/rclcpp/rclcpp/rclcpp.hpp"
-// #include "../../../../../../../../opt/ros/humble/include/rclcpp/rclcpp/logging.hpp"
+
 
 
 
