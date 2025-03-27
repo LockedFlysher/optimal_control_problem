@@ -91,7 +91,7 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
 
     for (int i = 0; i < stepNum_; ++i) {
         DMVector localSystem = getLocalSystem(arg);
-        qpSolver_.setVerbosity(true);
+        qpSolver_.setVerbosity(false);
         qpSolver_.setSystem(localSystem);
         qpSolver_.initSolver();
         qpSolver_.solve();
