@@ -31,6 +31,7 @@ bool CuCaQP::setHessianMatrix(const casadi::DM &hessian) {
     bool result = solver_.data()->setHessianMatrix(hessianMatrix);
     return result;
 }
+
 bool CuCaQP::setGradient(const casadi::DM &q) {
     gradient = casadiDMToEigenVector<OSQPFloat>(q);
 
@@ -41,6 +42,7 @@ bool CuCaQP::setGradient(const casadi::DM &q) {
     bool result = solver_.data()->setGradient(gradient);
     return result;
 }
+
 bool CuCaQP::setLinearConstraintsMatrix(const DM &A) {
     auto constraintMatrix = casadiDMToEigenSparse<OSQPFloat>(A);
 
@@ -87,6 +89,7 @@ bool CuCaQP::updateHessianMatrix(const casadi::DM &hessian) {
     bool result = solver_.updateHessianMatrix(hessianMatrix);
     return result;
 }
+
 bool CuCaQP::updateGradient(const casadi::DM &q) {
     gradient = casadiDMToEigenVector<OSQPFloat>(q);
 
@@ -97,6 +100,7 @@ bool CuCaQP::updateGradient(const casadi::DM &q) {
     bool result = solver_.updateGradient(gradient);
     return result;
 }
+
 bool CuCaQP::updateLinearConstraintsMatrix(const DM &A) {
     linearConstraintMatrix = casadiDMToEigenSparse<OSQPFloat>(A);
 
@@ -193,7 +197,7 @@ casadi::DM CuCaQP::getSolutionAsDM() {
 
 void CuCaQP::printSolverData() {
     // 直接访问OSQP内部数据
-    const auto* osqpData = solver_.data()->getData();
+    const auto *osqpData = solver_.data()->getData();
 
     // 打印梯度向量q
     std::cout << "内部存储的梯度向量q:\n";
@@ -220,7 +224,7 @@ void CuCaQP::printSolverData() {
     // 这里只打印非零元素
     std::cout << "内部存储的Hessian矩阵P (非零元素):\n";
     for (int j = 0; j < osqpData->n; j++) {
-        for (int p = osqpData->P->p[j]; p < osqpData->P->p[j+1]; p++) {
+        for (int p = osqpData->P->p[j]; p < osqpData->P->p[j + 1]; p++) {
             int i = osqpData->P->i[p];
             c_float val = osqpData->P->x[p];
             std::cout << "(" << i << "," << j << "): " << val << std::endl;
@@ -229,7 +233,7 @@ void CuCaQP::printSolverData() {
 
     std::cout << "内部存储的约束矩阵A (非零元素):\n";
     for (int j = 0; j < osqpData->n; j++) {
-        for (int p = osqpData->A->p[j]; p < osqpData->A->p[j+1]; p++) {
+        for (int p = osqpData->A->p[j]; p < osqpData->A->p[j + 1]; p++) {
             int i = osqpData->A->i[p];
             c_float val = osqpData->A->x[p];
             std::cout << "(" << i << "," << j << "): " << val << std::endl;
@@ -239,41 +243,11 @@ void CuCaQP::printSolverData() {
 
 void CuCaQP::setSystem(DMVector localSystem) {
     static bool firstTime{true};
-    if(firstTime){
-        setHessianMatrix(localSystem[0]);
-        setGradient(localSystem[1]);
-        setLinearConstraintsMatrix(localSystem[2]);
-        setLowerBound(localSystem[3]);
-        setUpperBound(localSystem[4]);
-//        std::cout<<"=== 第一次设置得到的参数 === \n";
-//        const auto& hessianMatrix = solver_.data()->getData()->P;
-//        const auto& gradientVector = solver_.data()->getData()->q;
-//        const auto& constraintMatrix = solver_.data()->getData()->A;
-//        const auto& lowerBound = solver_.data()->getData()->l;
-//        const auto& upperBound = solver_.data()->getData()->u;
-
-//        firstTime = false;
-    } else{
-        updateHessianMatrix(localSystem[0]);
-        updateGradient(localSystem[1]);
-        updateLinearConstraintsMatrix(localSystem[2]);
-        updateLowerBound(localSystem[3]);
-        updateUpperBound(localSystem[4]);
-
-        std::cout<<"=== 更新后测参数 === \n";
-        /*
-         *
-         *     OSQPCscMatrix* P; ///< the upper triangular part of the quadratic objective matrix P (size n x n).
-    OSQPCscMatrix* A; ///< linear constraints matrix A (size m x n)
-    OSQPFloat* q; ///< dense array for linear part of objective function (size n)
-    OSQPFloat* l; ///< dense array for lower bound (size m)
-    OSQPFloat* u; ///< dense array for upper bound (size m)*/
-        std::cout<<"Hessian : "<<solver_.data()->getData()->P;
-        std::cout<<"Gradient : "<<solver_.data()->getData()->q;
-        std::cout<<"A : "<<solver_.data()->getData()->A;
-        std::cout<<"l : "<<solver_.data()->getData()->l;
-        std::cout<<"u : "<<solver_.data()->getData()->u<<std::endl;
-    }
+    setHessianMatrix(localSystem[0]);
+    setGradient(localSystem[1]);
+    setLinearConstraintsMatrix(localSystem[2]);
+    setLowerBound(localSystem[3]);
+    setUpperBound(localSystem[4]);
 }
 
 
@@ -288,6 +262,7 @@ bool CuCaQP::setHessianMatrix(const Eigen::SparseMatrix<OSQPFloat> &P) {
     bool result = solver_.data()->setHessianMatrix(P);
     return result;
 }
+
 bool CuCaQP::setGradient(const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> &q) {
     if (q.size() != numOfVariables_) {
         std::cerr << "Error: Gradient vector size mismatch. Expected " << numOfVariables_ << std::endl;

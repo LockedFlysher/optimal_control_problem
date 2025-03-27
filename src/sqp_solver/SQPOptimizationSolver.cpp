@@ -83,8 +83,6 @@ DMVector SQPOptimizationSolver::getLocalSystem(const DMDict &arg) {
 
     DMVector localSystem = localSystemFunction_(
             DMVector{p, result_.at("x"), DM::vertcat({p, lbx, lbg}), DM::vertcat({p, ubx, ubg})});
-    std::cout << localSystem;
-
     return localSystem;
 }
 
