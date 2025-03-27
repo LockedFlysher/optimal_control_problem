@@ -4,6 +4,8 @@ cmake_minimum_required(VERSION 3.21)
 project(optimal_control_problem)
 # 查找ament_cmake包（ROS2基础构建系统）
 find_package(ament_cmake REQUIRED)
+link_directories(/usr/local/cuda/lib64)
+
 ##################################################################################################
 #################################### 用户配置区开始 ##############################################
 ##################################################################################################
@@ -149,6 +151,8 @@ foreach (TARGET_NAME IN LISTS ALL_TARGETS)
                 ${CASADI_LIBRARIES}  # CasADi
                 yaml-cpp             # YAML-CPP
                 OsqpEigen::OsqpEigen
+                /usr/local/cuda/lib64/libcublas.so
+                /usr/local/cuda/lib64/libcusparse.so
         )
         ament_target_dependencies(${TARGET_NAME} ${parent_packages})
     endif ()
