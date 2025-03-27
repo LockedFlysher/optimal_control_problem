@@ -18,7 +18,6 @@ OptimalControlProblem::OptimalControlProblem(const std::string &configFilePath) 
     configNode_ = YAML::LoadFile(
             ament_index_cpp::get_package_share_directory("optimal_control_problem") + "/config/OCP_config.yaml");
     //    初始化reference
-    reference_ = ::casadi::SX::sym("ref", OCPConfigPtr_->getFrameSize());
     genCode_ = configNode_["solver_settings"]["gen_code"].as<bool>();
     loadLib_ = configNode_["solver_settings"]["load_lib"].as<bool>();
 
@@ -287,82 +286,79 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
 
     // 2. 求解优化问题
     if (solverInputCheck(arg)) {
-        try {
-            if (genCode_) {
-                if (firstTime_) {
-                    // 使用生成的代码求解
-                    libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
-                                                       packagePath_ + "/code_gen/IPOPT_nlp_code.so");
-                    libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
-                                                     packagePath_ + "/code_gen/SQP_nlp_code.so");
+        if (genCode_) {
+            if (firstTime_) {
+                // 使用生成的代码求解
+                libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
+                                                   packagePath_ + "/code_gen/IPOPT_nlp_code.so");
+                libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
+                                                 packagePath_ + "/code_gen/SQP_nlp_code.so");
 
-                    res = libIPOPTSolver_(arg);
-                    firstTime_ = false;
-                    std::cout << "暖机完成，已取得当前的全局最优解\n";
-                } else {
-                    // 根据求解器类型选择不同的求解器
-                    switch (selectedSolver_) {
-                        case SolverType::IPOPT:
-                            res = libIPOPTSolver_(arg);
-                            break;
-                        case SolverType::SQP:
-                            res = libSQPSolver_(arg);
-                            break;
-                        case SolverType::CUDA_SQP:
-                            res = OSQPSolverPtr_->getOptimalSolution(arg);
-                            break;
-                        default:
-                            res = libIPOPTSolver_(arg);  // 默认使用IPOPT
-                            break;
-                    }
-                }
+                res = libIPOPTSolver_(arg);
+                firstTime_ = false;
+                std::cout << "暖机完成，已取得当前的全局最优解\n";
             } else {
-                if (firstTime_) {
-                    // 根据求解器类型选择不同的求解器
-                    switch (selectedSolver_) {
-                        case SolverType::IPOPT:
-                            res = IPOPTSolver_(arg);
-                            break;
-                        case SolverType::SQP:
-                            res = SQPSolver_(arg);
-                            break;
-                        case SolverType::MIXED:
-                            res = IPOPTSolver_(arg);
-                            break;
-                        case SolverType::CUDA_SQP:
-                            res = OSQPSolverPtr_->getOptimalSolution(arg);
-                            break;
-                    }
-                    firstTime_ = false;
-                } else {
-                    // 根据求解器类型选择不同的求解器
-                    switch (selectedSolver_) {
-                        case SolverType::IPOPT:
-                            res = IPOPTSolver_(arg);
-                            break;
-                        case SolverType::SQP:
-                            res = SQPSolver_(arg);
-                            break;
-                        case SolverType::MIXED:
-                            res = SQPSolver_(arg);
-                            break;
-                        case SolverType::CUDA_SQP:
-                            res = OSQPSolverPtr_->getOptimalSolution(arg);
-                            break;
-                    }
+                // 根据求解器类型选择不同的求解器
+                switch (selectedSolver_) {
+                    case SolverType::IPOPT:
+                        res = libIPOPTSolver_(arg);
+                        break;
+                    case SolverType::SQP:
+                        res = libSQPSolver_(arg);
+                        break;
+                    case SolverType::CUDA_SQP:
+                        res = OSQPSolverPtr_->getOptimalSolution(arg);
+                        break;
+                    default:
+                        res = libIPOPTSolver_(arg);  // 默认使用IPOPT
+                        break;
                 }
             }
-            // 3. 输出结果
-            std::cout << "\n=================== 优化结果 ===================" << std::endl;
-            std::cout << "目标函数值: " << res.at("f") << std::endl;
-            optimalTrajectory_ = res.at("x");
-            if (verbose_) {
-                std::cout << "最优解: " << res.at("x") << std::endl;
+        } else {
+            if (firstTime_) {
+                // 根据求解器类型选择不同的求解器
+                switch (selectedSolver_) {
+                    case SolverType::IPOPT:
+                        res = IPOPTSolver_(arg);
+                        break;
+                    case SolverType::SQP:
+                        res = SQPSolver_(arg);
+                        break;
+                    case SolverType::MIXED:
+                        res = IPOPTSolver_(arg);
+                        break;
+                    case SolverType::CUDA_SQP:
+                        res = OSQPSolverPtr_->getOptimalSolution(arg);
+                        break;
+                }
+                firstTime_ = false;
+            } else {
+                // 根据求解器类型选择不同的求解器
+                switch (selectedSolver_) {
+                    case SolverType::IPOPT:
+                        res = IPOPTSolver_(arg);
+                        break;
+                    case SolverType::SQP:
+                        res = SQPSolver_(arg);
+                        break;
+                    case SolverType::MIXED:
+                        res = SQPSolver_(arg);
+                        break;
+                    case SolverType::CUDA_SQP:
+                        res = OSQPSolverPtr_->getOptimalSolution(arg);
+                        break;
+                }
             }
-            // saveResultsToCSV(res.at("x"));
-        } catch (const std::exception &e) {
-            std::cerr << "优化求解失败: " << e.what() << std::endl;
         }
+        // 3. 输出结果
+        std::cout << "\n=================== 优化结果 ===================" << std::endl;
+        std::cout << "目标函数值: " << res.at("f") << std::endl;
+        optimalTrajectory_ = res.at("x");
+        if (verbose_) {
+            std::cout << "最优解: " << res.at("x") << std::endl;
+        }
+        // saveResultsToCSV(res.at("x"));
+
     } else {
         std::cerr << "求解器输入检查失败" << std::endl;
     }
@@ -397,8 +393,8 @@ bool OptimalControlProblem::solverInputCheck(std::map<std::string, ::casadi::DM>
         printDimensionMismatch("x0", expected_lbx_ubx_x0_size, arg["x0"].size1());
         return false;
     }
-//    reference的维度就是状态status的维度
-    int expected_p_size = OCPConfigPtr_->getFrameSize();
+
+    int expected_p_size = reference_.size1();
     if (arg["p"].size1() != expected_p_size) {
         printDimensionMismatch("p", expected_p_size, arg["p"].size1());
         return false;
@@ -426,4 +422,8 @@ casadi::DMVector OptimalControlProblem::getConstraintLowerBounds() const {
 
 casadi::DMVector OptimalControlProblem::getConstraintUpperBounds() const {
     return constraintUpperBounds_;
+}
+
+void OptimalControlProblem::setReference(const casadi::SX& reference) {
+    reference_ = reference;
 }

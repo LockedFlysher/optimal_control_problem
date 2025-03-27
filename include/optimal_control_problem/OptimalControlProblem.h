@@ -78,6 +78,8 @@ public:
      * 把OCP的当前的状态输入到这里，reference的具体的数值发到这里，就行了
      * */
     void computeOptimalTrajectory(const casadi::DM &frame, const casadi::DM &reference);
+
+    void setReference(const casadi::SX& reference);
     /*
      * 构造函数
      * */

@@ -8,32 +8,6 @@
  * 最小单步求解示例
  * */
 using namespace casadi;
-
-/**
-* @brief 输入的arg保持和原来一致
-* @note None
-* @param None
-* @retval None
-*/
-
-DMVector SQPOptimizationSolver::getLocalSystem(const DMDict &arg) {
-
-    DM lbx = arg.at("lbx");
-    DM ubx = arg.at("ubx");
-    DM lbg = arg.at("lbg");
-    DM ubg = arg.at("ubg");
-    DM p = DM::zeros();
-    if (arg.find("p") == arg.end()){
-        DM p = DM::zeros();
-    } else{
-        p = arg.at("p");
-    }
-
-    DMVector localSystem = localSystemFunction_(
-            DMVector{p, result_.at("x"), DM::vertcat({lbx, lbg}), DM::vertcat({ubx, ubg})});
-    return localSystem;
-}
-
 SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
     std::cout << "\n==== SQP优化求解器初始化 ====" << std::endl;
 
@@ -61,7 +35,7 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
     } else {
         reference = ::casadi::SX();  // 假设空SX表示未定义
     }
-
+    static int referenceDim = reference.size1();
     auto augmentedVariables = SX::vertcat({reference, variables});
     objectiveFunctionAutoDifferentiatorPtr_ = std::make_shared<AutoDifferentiator>(augmentedVariables, objectExpr);
     SX augmentedConstraints = SX::vertcat({reference, variables, constraints});
@@ -88,6 +62,30 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
     };
     std::cout<<"\n====初始化完成===\n";
 }
+/**
+* @brief 输入的arg保持和原来一致
+* @note None
+* @param None
+* @retval None
+*/
+
+DMVector SQPOptimizationSolver::getLocalSystem(const DMDict &arg) {
+    std::cout<<localSystemFunction_;
+    DM lbx = arg.at("lbx");
+    DM ubx = arg.at("ubx");
+    DM lbg = arg.at("lbg");
+    DM ubg = arg.at("ubg");
+    DM p = DM::zeros();
+    if (arg.find("p") == arg.end()){
+        DM p = DM::zeros();
+    } else{
+        p = arg.at("p");
+    }
+
+    DMVector localSystem = localSystemFunction_(
+            DMVector{p, result_.at("x"), DM::vertcat({p,lbx, lbg}), DM::vertcat({p,ubx, ubg})});
+    return localSystem;
+}
 
 DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
     std::cout << "\n==== 开始求解最优解 ====" << std::endl;
@@ -104,12 +102,12 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
         qpSolver_.initSolver();
         DM solution = qpSolver_.getSolutionAsDM();
         DM oldRes = result_.at("x");
-        result_.at("x") += alpha_ * solution;
+        result_.at("x") += alpha_ * solution(Slice(arg.at("p").size1()-1,-1));
         std::cout << "解更新: " << oldRes << " -> " << result_.at("x") << std::endl;
     }
     std::cout << "\n==== 优化求解完成 ====" << std::endl;
     std::cout << "最终结果: " << std::endl;
-    std::cout << "  res = " << result_.at("x") << std::endl;
+    std::cout << "  x = " << result_.at("x") << std::endl;
     std::cout << "  f = " << result_.at("f") << std::endl;
 
     return result_;
