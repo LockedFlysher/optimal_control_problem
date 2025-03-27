@@ -26,7 +26,7 @@ void test_all_qp_cases() {
                 {"ubx", {100, 100}},
                 {"lbg", {} },  // 空约束
                 {"ubg", {}},  // 空约束
-                {"p", {0}}
+                {"p", {}}
         };
         std::cout << "预期解：x1=3, x2=-2" << std::endl;
         std::cout << "实际解：" << solver.getOptimalSolution(arg) << std::endl;

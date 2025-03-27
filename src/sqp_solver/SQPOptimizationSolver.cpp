@@ -102,7 +102,16 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
         qpSolver_.initSolver();
         DM solution = qpSolver_.getSolutionAsDM();
         DM oldRes = result_.at("x");
-        result_.at("x") += alpha_ * solution(Slice(arg.at("p").size1()-1,-1));
+        if(arg.find("p")==arg.end()){
+            result_.at("x")+=alpha_*solution;
+        } else{
+            if (arg.at("p").size1()==0){
+                result_.at("x")+=alpha_*solution;
+            } else{
+                result_.at("x") += alpha_ * solution(Slice(arg.at("p").size1(),arg.at("p").size1()+arg.at("x").size1()));
+
+            }
+        }
         std::cout << "解更新: " << oldRes << " -> " << result_.at("x") << std::endl;
     }
     std::cout << "\n==== 优化求解完成 ====" << std::endl;
