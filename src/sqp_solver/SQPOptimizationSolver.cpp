@@ -21,8 +21,8 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
         path = "/home/andew/project/NEBULA_ws/src/CasADi-OptimalControlProblem";
     }
     YAML::Node config = YAML::LoadFile(path+"/config/OCP_config.yaml");
-    stepNum_ = config["problem"]["SQP_step"].as<int>();
-    alpha_ = config["problem"]["ADMM_step"].as<double>();
+    stepNum_ = config["problem"]["ADMM_step"].as<int>();
+    alpha_ = config["problem"]["SQP_step"].as<double>();
     std::cout<<"stepNum_"<< stepNum_ <<std::endl;
     std::cout<<"stepNum_"<< alpha_ <<std::endl;
 
