@@ -13,11 +13,10 @@ OptimalControlProblem::OptimalControlProblem(const std::string &configFilePath) 
     } catch (const std::exception &e) {
         throw std::runtime_error("Failed to get package path: " + std::string(e.what()));
     }
-    OCPConfigPtr_ = std::make_unique<OCPConfig>();
+    OCPConfigPtr_ = std::make_unique<OCPConfig>(configFilePath);
 
-    configNode_ = YAML::LoadFile(
-            ament_index_cpp::get_package_share_directory("optimal_control_problem") + "/config/OCP_config.yaml");
-    //    初始化reference
+    configNode_ = YAML::LoadFile(configFilePath);
+    //    初始化reference0
     genCode_ = configNode_["solver_settings"]["gen_code"].as<bool>();
     loadLib_ = configNode_["solver_settings"]["load_lib"].as<bool>();
 

@@ -77,7 +77,7 @@ public:
 
     casadi::DM getInitialGuess();
 
-    OCPConfig();
+    OCPConfig(const std::string &configFilePath);
 
     ~OCPConfig() = default;
 };
