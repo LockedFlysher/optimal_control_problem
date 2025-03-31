@@ -426,3 +426,27 @@ casadi::DMVector OptimalControlProblem::getConstraintUpperBounds() const {
 void OptimalControlProblem::setReference(const casadi::SX& reference) {
     reference_ = reference;
 }
+
+::casadi::DM OptimalControlProblem::getOptimalInputFirstFrame() {
+    //根据你的命名来提取输入的变量
+    int inputFrameSize_ = OCPConfigPtr_->getVariable(0,"F").size1();
+    const int variableSize = OCPConfigPtr_->getFrameSize();
+    // 收集所有输入元素的索引
+    std::vector<casadi_int> inputIndices;
+    for (int i = 0; i < OCPConfigPtr_->getHorizon(); ++i) {
+        int cycleStart = i * (variableSize);               // 当前周期的起始索引
+        int inputStart = cycleStart + variableSize-inputFrameSize_; // 当前周期内输入的起始索引
+        for (int j = 0; j < inputFrameSize_; ++j) {
+            inputIndices.push_back(inputStart + j);   // 将输入索引逐个加入列表
+        }
+    }
+    // 提取所有输入元素
+    ::casadi::DM inputs = optimalTrajectory_(inputIndices);
+    std::cout << "输入的所有帧是" << std::endl;
+    std::cout<<inputs;
+    ::casadi::DM inputFirstFrame = inputs(::casadi::Slice(0, inputFrameSize_, 1));
+    std::vector<double> vec;
+    vec = inputFirstFrame.get_elements(); // 将所有元素复制到
+    std::cout << "\n输出的第一帧是" << vec << std::endl;
+    return ::casadi::DM(vec);
+}
