@@ -14,7 +14,7 @@ public:
 * @retval None
 */
 
-    explicit SQPOptimizationSolver(::casadi::SXDict nlp);
+    explicit SQPOptimizationSolver(::casadi::SXDict nlp,YAML::Node);
 /**
 * @brief SQP求解
 * @note 如果是MPC问题初始点是通过限制第一项的lbx和ubx来完成的，和OptimalControlProblem一致

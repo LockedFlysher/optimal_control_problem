@@ -12,19 +12,11 @@
  * */
 using namespace casadi;
 
-SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp) {
+SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp,YAML::Node configNode) {
     //加载SQP和ADMM的参数
-    auto path = ament_index_cpp::get_package_share_directory("optimal_control_problem");
-    if (path.empty()){
-        //替换成自己的绝对路径
-        std::cout<<"No path to optimal_control_problem"<<std::endl;
-        path = "/home/andew/project/NEBULA_ws/src/CasADi-OptimalControlProblem";
-    }
-    YAML::Node config = YAML::LoadFile(path+"/config/OCP_config.yaml");
-    stepNum_ = config["problem"]["SQP_step"].as<int>();
-    alpha_ = config["problem"]["ADMM_step"].as<double>();
 
-
+    stepNum_ = configNode["solver_settings"]["ADMM_step"].as<int>();
+    alpha_ = configNode["solver_settings"]["SQP_step"].as<double>();
 
     // 必需参数
     if (nlp.find("f") == nlp.end()) {

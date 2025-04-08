@@ -6,33 +6,28 @@
 #include <iostream>
 
 //通过解析yaml文件，初始化dt、horizon,创建系统状态和输入变量
-OptimalControlProblem::OptimalControlProblem(const std::string &configFilePath) {
+OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
     // 获取包路径
-    try {
-        packagePath_ = ament_index_cpp::get_package_share_directory("optimal_control_problem");
-    } catch (const std::exception &e) {
-        throw std::runtime_error("Failed to get package path: " + std::string(e.what()));
-    }
-    OCPConfigPtr_ = std::make_unique<OCPConfig>(configFilePath);
-
-    configNode_ = YAML::LoadFile(configFilePath);
+    packagePath_ = ament_index_cpp::get_package_share_directory("optimal_control_problem");
+    OCPConfigPtr_ = std::make_unique<OCPConfig>(configNode);
+    configNode_ = configNode;
     //    初始化reference0
-    genCode_ = configNode_["solver_settings"]["gen_code"].as<bool>();
-    loadLib_ = configNode_["solver_settings"]["load_lib"].as<bool>();
+    genCode_ = configNode["solver_settings"]["gen_code"].as<bool>();
+    loadLib_ = configNode["solver_settings"]["load_lib"].as<bool>();
 
-    if (configNode_["solver_settings"]["solve_method"].as<std::string>() == "IPOPT") {
+    if (configNode["solver_settings"]["solve_method"].as<std::string>() == "IPOPT") {
         setSolverType(SolverType::IPOPT);
     }
-    if (configNode_["solver_settings"]["solve_method"].as<std::string>() == "MIXED") {
+    if (configNode["solver_settings"]["solve_method"].as<std::string>() == "MIXED") {
         setSolverType(SolverType::MIXED);
     }
-    if (configNode_["solver_settings"]["solve_method"].as<std::string>() == "SQP") {
+    if (configNode["solver_settings"]["solve_method"].as<std::string>() == "SQP") {
         setSolverType(SolverType::SQP);
     }
-    if (configNode_["solver_settings"]["solve_method"].as<std::string>() == "CUDA_SQP") {
+    if (configNode["solver_settings"]["solve_method"].as<std::string>() == "CUDA_SQP") {
         setSolverType(SolverType::CUDA_SQP);
     }
-    if (configNode_["solver_settings"]["verbose"].as<bool>()) {
+    if (configNode["solver_settings"]["verbose"].as<bool>()) {
         std::cout << "输出c代码且编译动态链接库：" << genCode_ << std::endl;
         std::cout << "使用动态链接库对求解器进行加载：" << genCode_ << std::endl;
     }
@@ -141,7 +136,7 @@ void OptimalControlProblem::genSolver() {
             break;
         }
         case SolverType::CUDA_SQP: {
-            OSQPSolverPtr_ = std::make_shared<SQPOptimizationSolver>(nlp);
+            OSQPSolverPtr_ = std::make_shared<SQPOptimizationSolver>(nlp,configNode_);
             break;
         }
     }
@@ -192,29 +187,20 @@ void OptimalControlProblem::genSolver() {
         };
         const std::string compile_flags = "-fPIC -shared -O3";
         // 生成代码文件
-        try {
-            const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
-            const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
-            const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
-            const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
-            IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
-            compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
-            copyFile(IPOPT_solver_source_file, IPOPT_target_file);
-        } catch (const std::exception &e) {
-            throw std::runtime_error("Failed to generate solver dependencies: " + std::string(e.what()));
-        }
-        // 生成代码文件
-        try {
-            const std::string SQP_solver_file_name = "SQP_nlp_code";
-            const std::string SQP_solver_source_file = SQP_solver_file_name + ".c";
-            const std::string SQP_target_file = code_dir + SQP_solver_source_file;
-            const std::string SQP_shared_lib = code_dir + SQP_solver_file_name + ".so";
-            SQPSolver_.generate_dependencies(SQP_solver_source_file);
-            compileLibrary(SQP_target_file, SQP_shared_lib, compile_flags);
-            copyFile(SQP_solver_source_file, SQP_target_file);
-        } catch (const std::exception &e) {
-            throw std::runtime_error("Failed to generate solver dependencies: " + std::string(e.what()));
-        }
+        const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
+        const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
+        const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
+        const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
+        IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
+        compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
+        copyFile(IPOPT_solver_source_file, IPOPT_target_file);
+        const std::string SQP_solver_file_name =  "SQP_nlp_code";
+        const std::string SQP_solver_source_file = SQP_solver_file_name + ".c";
+        const std::string SQP_target_file = code_dir + SQP_solver_source_file;
+        const std::string SQP_shared_lib = code_dir + SQP_solver_file_name + ".so";
+        SQPSolver_.generate_dependencies(SQP_solver_source_file);
+        compileLibrary(SQP_target_file, SQP_shared_lib, compile_flags);
+        copyFile(SQP_solver_source_file, SQP_target_file);
         // 输出问题规模信息
         if (verbose_) {
             const auto num_vars = vars.size1();
@@ -423,7 +409,7 @@ casadi::DMVector OptimalControlProblem::getConstraintUpperBounds() const {
     return constraintUpperBounds_;
 }
 
-void OptimalControlProblem::setReference(const casadi::SX& reference) {
+void OptimalControlProblem::setReference(const casadi::SX &reference) {
     reference_ = reference;
 }
 

@@ -82,9 +82,9 @@ public:
 
     void setReference(const casadi::SX& reference);
     /*
-     * 构造函数
+     * 构造函数，传入的参数应该是Node
      * */
-    explicit OptimalControlProblem(const std::string &configFilePath);
+    explicit OptimalControlProblem(YAML::Node);
     /*
      * costFunction是从这里进行
      * */

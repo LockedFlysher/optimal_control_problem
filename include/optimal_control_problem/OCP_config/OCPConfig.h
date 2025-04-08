@@ -77,7 +77,10 @@ public:
 
     casadi::DM getInitialGuess();
 
-    OCPConfig(const std::string &configFilePath);
+    /*
+     * 传入的参数是optimal_control_problem的Node
+     * */
+    OCPConfig(YAML::Node);
 
     ~OCPConfig() = default;
 };

@@ -79,15 +79,8 @@ void OCPConfig::initializeFrame(Frame &frame, const YAML::Node &config) {
         frame.totalSize += fieldSize;
     }
 }
-OCPConfig::OCPConfig(const std::string &configFilePath) {
+OCPConfig::OCPConfig(YAML::Node configNode) {
     try {
-        OCP_INFO("开始初始化OCPConfig...");
-        std::string configPath = ament_index_cpp::get_package_share_directory("optimal_control_problem") + "/config/OCP_config.yaml";
-        OCP_INFO("加载配置文件: " + configPath);
-
-        auto configNode = YAML::LoadFile(configFilePath);
-        OCP_INFO("配置文件加载成功");
-
         // 初始化默认值
         horizon_ = 10; // 默认值
         dt_ = 0.1;     // 默认值
