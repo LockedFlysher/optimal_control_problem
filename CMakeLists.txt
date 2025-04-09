@@ -4,7 +4,6 @@ cmake_minimum_required(VERSION 3.21)
 project(optimal_control_problem)
 # 查找ament_cmake包（ROS2基础构建系统）
 find_package(ament_cmake REQUIRED)
-link_directories(/usr/local/cuda/lib64)
 
 ##################################################################################################
 #################################### 用户配置区开始 ##############################################
@@ -33,6 +32,7 @@ set(dependencies
 
 # 设置ROS包依赖
 set(parent_packages
+        rclcpp
         ament_index_cpp
 )
 
@@ -50,12 +50,12 @@ aux_source_directory(src ${TARGET1}_SOURCES)
 aux_source_directory(src/OCP_config ${TARGET1}_SOURCES)
 aux_source_directory(src/sqp_solver ${TARGET1}_SOURCES)
 
-set(TARGET2 "test_sqp")
-set(${TARGET2}_TYPE "EXECUTABLE")
-aux_source_directory(src ${TARGET2}_SOURCES)
-aux_source_directory(src/OCP_config ${TARGET2}_SOURCES)
-aux_source_directory(src/sqp_solver ${TARGET2}_SOURCES)
-aux_source_directory(test ${TARGET2}_SOURCES)
+#set(TARGET2 "test_sqp")
+#set(${TARGET2}_TYPE "EXECUTABLE")
+#aux_source_directory(src ${TARGET2}_SOURCES)
+#aux_source_directory(src/OCP_config ${TARGET2}_SOURCES)
+#aux_source_directory(src/sqp_solver ${TARGET2}_SOURCES)
+#aux_source_directory(test ${TARGET2}_SOURCES)
 
 # 将所有目标名称添加到列表中
 set(ALL_TARGETS
@@ -75,10 +75,7 @@ if(PKG_CONFIG_FOUND)
 endif()
 ##################################################################################################
 #################################### 用户配置区结束 ##############################################
-##################################################################################################
-
-# 查找ament_cmake包（ROS2基础构建系统）
-find_package(ament_cmake REQUIRED)
+#################################################################################################
 
 ##################################################################################################
 #################################### 自动处理区开始 ##############################################

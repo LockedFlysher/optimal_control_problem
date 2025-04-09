@@ -215,7 +215,6 @@ void OCPConfig::parseOCPBounds(YAML::Node configNode) {
             } else {
                 OCP_WARN("变量 " + varName + " 的upper_bound不是序列类型");
             }
-
             upperBound.emplace_back(upper_sx);
         }
 
