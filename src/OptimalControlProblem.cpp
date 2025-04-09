@@ -435,9 +435,9 @@ void OptimalControlProblem::setReference(const casadi::SX &reference) {
     ::casadi::DM inputs = optimalTrajectory_(inputIndices);
     std::cout << "输入的所有帧是" << std::endl;
     std::cout<<inputs;
-    ::casadi::DM inputFirstFrame = inputs(::casadi::Slice(0, inputFrameSize_, 1));
+    ::casadi::DM inputFirstFrame = inputs(::casadi::Slice(inputFrameSize_, 2*inputFrameSize_, 1));
     std::vector<double> vec;
     vec = inputFirstFrame.get_elements(); // 将所有元素复制到
-    std::cout << "\n输出的第一帧是" << vec << std::endl;
+    std::cout << "\n输出的第二帧是" << vec << std::endl;
     return ::casadi::DM(vec);
 }
