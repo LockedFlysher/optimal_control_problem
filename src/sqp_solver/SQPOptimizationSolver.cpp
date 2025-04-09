@@ -3,16 +3,12 @@
 //
 #include "sqp_solver/SQPOptimizationSolver.h"
 #include <iostream>
-
-
-
-
 /*
  * 最小单步求解示例
  * */
 using namespace casadi;
 
-SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp,YAML::Node configNode) {
+SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp, YAML::Node configNode) {
     //加载SQP和ADMM的参数
 
     stepNum_ = configNode["solver_settings"]["ADMM_step"].as<int>();
@@ -58,7 +54,7 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp,YAML::Node con
     localSystemFunction_ = Function("localSystemFunction", {reference, variables, l, u},
                                     {hessian, gradient, linearizedIneqConstraints[0], l_linearized, u_linearized});
     qpSolver_.setDimension(augmentedVariables.size1(), augmentedConstraints.size1());
-    qpSolver_.setVerbosity(false);
+    qpSolver_.setVerbosity(true);
     qpSolver_.setWarmStart(true);
 
     qpSolver_.setAbsoluteTolerance(1e-3);
@@ -99,7 +95,6 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
 
     for (int i = 0; i < stepNum_; ++i) {
         DMVector localSystem = getLocalSystem(arg);
-        qpSolver_.setVerbosity(false);
         qpSolver_.setSystem(localSystem);
         qpSolver_.initSolver();
         qpSolver_.solve();
@@ -111,14 +106,13 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
             if (arg.at("p").size1() == 0) {
                 result_.at("x") += alpha_ * solution;
             } else {
-                result_.at("x") +=
-                        alpha_ * solution(Slice(arg.at("p").size1(), solution.size1()));
+                result_.at("x") += alpha_ * solution(Slice(arg.at("p").size1(), solution.size1()));
             }
         }
-        std::cout << "解更新: " << oldRes << " -> " << result_.at("x") << std::endl;
+//        std::cout << "解更新: " << oldRes << " -> " << result_.at("x") << std::endl;
     }
-    std::cout << "最终结果: " << std::endl;
-    std::cout << "  x = " << result_.at("x") << std::endl;
-    std::cout << "  f = " << result_.at("f") << std::endl;
+//    std::cout << "最终结果: " << std::endl;
+//    std::cout << "  x = " << result_.at("x") << std::endl;
+//    std::cout << "  f = " << result_.at("f") << std::endl;
     return result_;
 }

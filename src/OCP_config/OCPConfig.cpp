@@ -94,7 +94,7 @@ OCPConfig::OCPConfig(YAML::Node configNode) {
                 this->problemName_ = configNode["problem"]["name"].as<std::string>();
                 OCP_INFO("问题名称: " + this->problemName_);
             }
-            if (configNode["problem"]["dt"]) {
+            if (configNode["discretization_settings"]["problem"]["dt"]) {
                 this->dt_ = configNode["problem"]["dt"].as<double>();
                 if (this->dt_ <= 0) {
                     OCP_ERROR("dt值无效: " + std::to_string(this->dt_));
@@ -102,7 +102,7 @@ OCPConfig::OCPConfig(YAML::Node configNode) {
                 }
                 OCP_INFO("dt: " + std::to_string(this->dt_));
             }
-            if (configNode["problem"]["horizon"]) {
+            if (configNode["discretization_settings"]["problem"]["horizon"]) {
                 this->horizon_ = configNode["problem"]["horizon"].as<int>();
                 if (horizon_ <= 1) {
                     OCP_ERROR("horizon值无效: " + std::to_string(this->horizon_));
