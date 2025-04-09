@@ -4,6 +4,7 @@ cmake_minimum_required(VERSION 3.21)
 project(optimal_control_problem)
 # 查找ament_cmake包（ROS2基础构建系统）
 find_package(ament_cmake REQUIRED)
+link_directories(/usr/local/cuda/lib64)
 
 ##################################################################################################
 #################################### 用户配置区开始 ##############################################
