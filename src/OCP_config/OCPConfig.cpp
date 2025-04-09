@@ -88,14 +88,14 @@ OCPConfig::OCPConfig(YAML::Node configNode) {
         verbose_ = false;
 
         // 解析问题配置
-        if (configNode["problem"]) {
+        if (configNode["discretization_settings"]["problem"]) {
             OCP_INFO("解析problem节点");
-            if (configNode["problem"]["name"]) {
-                this->problemName_ = configNode["problem"]["name"].as<std::string>();
+            if (configNode["discretization_settings"]["problem"]["name"]) {
+                this->problemName_ = configNode["discretization_settings"]["problem"]["name"].as<std::string>();
                 OCP_INFO("问题名称: " + this->problemName_);
             }
             if (configNode["discretization_settings"]["problem"]["dt"]) {
-                this->dt_ = configNode["problem"]["dt"].as<double>();
+                this->dt_ = configNode["discretization_settings"]["problem"]["dt"].as<double>();
                 if (this->dt_ <= 0) {
                     OCP_ERROR("dt值无效: " + std::to_string(this->dt_));
                     throw std::invalid_argument("dt不应该小于或等于0");
@@ -103,15 +103,15 @@ OCPConfig::OCPConfig(YAML::Node configNode) {
                 OCP_INFO("dt: " + std::to_string(this->dt_));
             }
             if (configNode["discretization_settings"]["problem"]["horizon"]) {
-                this->horizon_ = configNode["problem"]["horizon"].as<int>();
+                this->horizon_ = configNode["discretization_settings"]["problem"]["horizon"].as<int>();
                 if (horizon_ <= 1) {
                     OCP_ERROR("horizon值无效: " + std::to_string(this->horizon_));
                     throw std::invalid_argument("horizon不应该小于或等于1");
                 }
                 OCP_INFO("horizon: " + std::to_string(this->horizon_));
             }
-            if (configNode["problem"]["verbose"]) {
-                this->verbose_ = configNode["problem"]["verbose"].as<bool>();
+            if (configNode["discretization_settings"]["problem"]["verbose"]) {
+                this->verbose_ = configNode["discretization_settings"]["problem"]["verbose"].as<bool>();
                 OCP_INFO("verbose: " + std::string(this->verbose_ ? "true" : "false"));
             }
         } else {
