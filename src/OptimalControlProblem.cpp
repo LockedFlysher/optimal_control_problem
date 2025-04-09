@@ -118,9 +118,14 @@ void OptimalControlProblem::genSolver() {
     };
     // 设置求解器选项
     ::casadi::Dict solver_opts;
-    solver_opts["print_in"] = 0;
-    solver_opts["print_out"] = 0;
-    solver_opts["print_time"] = 0;
+//    solver_opts["ipopt"] = ::casadi::Dict{
+//            {"warm_start_init_point", "yes"},
+//            {"warm_start_bound_push", 1e-8},
+//            {"warm_start_mult_bound_push", 1e-8},
+//            {"mu_init", 1e-5},
+//            {"bound_relax_factor", 1e-9},
+//            {"max_iter", 50}
+//    };
     switch (selectedSolver_) {
         case SolverType::IPOPT: {
             IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
