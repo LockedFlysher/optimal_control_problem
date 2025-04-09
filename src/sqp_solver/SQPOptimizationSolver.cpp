@@ -59,7 +59,7 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp, YAML::Node co
 
     qpSolver_.setAbsoluteTolerance(1e-3);
     qpSolver_.setRelativeTolerance(1e-3);
-    qpSolver_.setMaxIteration(50);
+    qpSolver_.setMaxIteration(500);
     result_ = {
             {"x", DM::zeros(variables.size1())},
             {"f", DM::zeros(1)}

@@ -79,61 +79,29 @@ void OCPConfig::initializeFrame(Frame &frame, const YAML::Node &config) {
         frame.totalSize += fieldSize;
     }
 }
+
 OCPConfig::OCPConfig(YAML::Node configNode) {
-    try {
-        // 初始化默认值
-        horizon_ = 10; // 默认值
-        dt_ = 0.1;     // 默认值
-        problemName_ = "default";
-        verbose_ = false;
-
-        // 解析问题配置
-        if (configNode["discretization_settings"]["problem"]) {
-            OCP_INFO("解析problem节点");
-            if (configNode["discretization_settings"]["problem"]["name"]) {
-                this->problemName_ = configNode["discretization_settings"]["problem"]["name"].as<std::string>();
-                OCP_INFO("问题名称: " + this->problemName_);
-            }
-            if (configNode["discretization_settings"]["problem"]["dt"]) {
-                this->dt_ = configNode["discretization_settings"]["problem"]["dt"].as<double>();
-                if (this->dt_ <= 0) {
-                    OCP_ERROR("dt值无效: " + std::to_string(this->dt_));
-                    throw std::invalid_argument("dt不应该小于或等于0");
-                }
-                OCP_INFO("dt: " + std::to_string(this->dt_));
-            }
-            if (configNode["discretization_settings"]["problem"]["horizon"]) {
-                this->horizon_ = configNode["discretization_settings"]["problem"]["horizon"].as<int>();
-                if (horizon_ <= 1) {
-                    OCP_ERROR("horizon值无效: " + std::to_string(this->horizon_));
-                    throw std::invalid_argument("horizon不应该小于或等于1");
-                }
-                OCP_INFO("horizon: " + std::to_string(this->horizon_));
-            }
-            if (configNode["discretization_settings"]["problem"]["verbose"]) {
-                this->verbose_ = configNode["discretization_settings"]["problem"]["verbose"].as<bool>();
-                OCP_INFO("verbose: " + std::string(this->verbose_ ? "true" : "false"));
-            }
-        } else {
-            OCP_WARN("未找到problem节点，使用默认值");
-        }
-
-        // 解析边界条件
-        OCP_INFO("开始解析边界条件...");
-        parseOCPBounds(configNode);
-        OCP_INFO("边界条件解析完成");
-
-        // 创建变量
-        OCP_INFO("创建状态和输入变量");
-        OCP_INFO("帧大小: " + std::to_string(variableFrame_.totalSize));
-        variables_ = casadi::SX::sym("X", horizon_ * variableFrame_.totalSize, 1);
-        OCP_INFO("OCPConfig初始化完成");
-    } catch (const std::exception& e) {
-        OCP_ERROR("OCPConfig初始化失败: " + std::string(e.what()));
-        throw;
-    }
+    // 初始化默认值
+    horizon_ = 10; // 默认值
+    dt_ = 0.1;     // 默认值
+    verbose_ = false;
+    // 解析问题配置
+    OCP_INFO("优化问题配置解析");
+    this->dt_ = configNode["discretization_settings"]["dt"].as<double>();
+    OCP_INFO("dt: " + std::to_string(this->dt_));
+    this->horizon_ = configNode["discretization_settings"]["horizon"].as<int>();
+    OCP_INFO("horizon: " + std::to_string(this->horizon_));
+    this->verbose_ = configNode["solver_settings"]["verbose"].as<bool>();
+    // 解析边界条件
+    OCP_INFO("开始解析边界条件...");
+    parseOCPBounds(configNode);
+    OCP_INFO("边界条件解析完成");
+    // 创建变量
+    OCP_INFO("创建状态和输入变量");
+    OCP_INFO("帧大小: " + std::to_string(variableFrame_.totalSize));
+    variables_ = casadi::SX::sym("X", horizon_ * variableFrame_.totalSize, 1);
+    OCP_INFO("OCPConfig初始化完成");
 }
-
 
 
 void OCPConfig::parseOCPBounds(YAML::Node configNode) {
@@ -195,7 +163,7 @@ void OCPConfig::parseOCPBounds(YAML::Node configNode) {
                             try {
                                 lower_sx(i) = std::stod(value);
                                 OCP_DEBUG("  索引 " + std::to_string(i) + ": " + value);
-                            } catch (const std::exception& e) {
+                            } catch (const std::exception &e) {
                                 OCP_ERROR("  无法将值 '" + value + "' 转换为数值: " + e.what());
                                 throw;
                             }
@@ -235,7 +203,7 @@ void OCPConfig::parseOCPBounds(YAML::Node configNode) {
                             try {
                                 upper_sx(i) = std::stod(value);
                                 OCP_DEBUG("  索引 " + std::to_string(i) + ": " + value);
-                            } catch (const std::exception& e) {
+                            } catch (const std::exception &e) {
                                 OCP_ERROR("  无法将值 '" + value + "' 转换为数值: " + e.what());
                                 throw;
                             }
@@ -275,7 +243,7 @@ void OCPConfig::parseOCPBounds(YAML::Node configNode) {
         // 打印边界向量大小
         OCP_INFO("变量下界向量大小: " + std::to_string(lowerBounds_.size()));
         OCP_INFO("变量上界向量大小: " + std::to_string(upperBounds_.size()));
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         OCP_ERROR("解析OCP边界条件失败: " + std::string(e.what()));
         throw;
     }
@@ -336,11 +304,12 @@ void OCPConfig::coverLowerBounds(const casadi::SX &oneFrameLowerBound) {
             lowerBounds_.emplace_back(dmBound);
         }
         OCP_INFO("变量下界设置完成，大小: " + std::to_string(lowerBounds_.size()));
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         OCP_ERROR("设置变量下界失败: " + std::string(e.what()));
         throw;
     }
 }
+
 void OCPConfig::coverUpperBounds(const casadi::SX &oneFrameUpperBound) {
     OCP_INFO("设置状态变量上界...");
     OCP_INFO("  一帧上界大小: " + std::to_string(oneFrameUpperBound.size1()) + "x" +
@@ -353,7 +322,7 @@ void OCPConfig::coverUpperBounds(const casadi::SX &oneFrameUpperBound) {
             upperBounds_.emplace_back(dmBound);
         }
         OCP_INFO("状态变量上界设置完成，大小: " + std::to_string(upperBounds_.size()));
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         OCP_ERROR("设置状态变量上界失败: " + std::string(e.what()));
         throw;
     }

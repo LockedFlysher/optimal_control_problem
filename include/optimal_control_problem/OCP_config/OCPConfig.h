@@ -40,7 +40,6 @@ private:
     double dt_{0.1};
     casadi::SX variables_;
     bool verbose_;
-    std::string problemName_;
     Frame variableFrame_;
     std::vector<casadi::DM> upperBounds_;
     std::vector<casadi::DM> lowerBounds_;
