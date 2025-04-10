@@ -1,4 +1,4 @@
-#include "sqp_solver/CuCaQP.h"
+#include "optimal_control_problem//sqp_solver/CuCaQP.h"
 #include <iostream>
 #include <iomanip> // 用于格式化输出
 

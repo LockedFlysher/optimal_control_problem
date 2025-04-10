@@ -149,15 +149,19 @@ void OptimalControlProblem::genSolver() {
         }
         case SolverSettings::SolverType::SQP: {
             casadi::Dict sqp_options;
+            Dict solver_options;
+            sqp_options["error_on_fail"] = false;
 //            qpsol: 指定用于求解二次规划子问题的 QP 求解器，例如 'qpoases'、'osqp' 或 'nlpsol'。
-            sqp_options["qpsol"] = "qpoases";
+            solver_options["qpsol"] = "nlpsol";
+            solver_options["qpsol_options"] = sqp_options;
+            sqp_options["error_on_fail"] = false;
 //            hessian_approximation: 设置 Hessian 矩阵的近似方法，可能包括 'exact'（精确 Hessian）或 'limited-memory'（如 BFGS 近似）。
-            sqp_options["hessian_approximation"] = "exact";
+            sqp_options["hessian_approximation"] = "limited-memory";
             sqp_options["max_iter"] = solverSettings.SQP_settings.stepNum;
             for (const auto& option : basicOptions) {
                 sqp_options[option.first] = option.second;
             }
-            SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, sqp_options);
+            SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_options);
             break;
         }
         case SolverSettings::SolverType::MIXED: {
@@ -175,11 +179,13 @@ void OptimalControlProblem::genSolver() {
 //            hessian_approximation: 设置 Hessian 矩阵的近似方法，可能包括 'exact'（精确 Hessian）或 'limited-memory'（如 BFGS 近似）。
             sqp_options["hessian_approximation"] = "exact";
             sqp_options["max_iter"] = solverSettings.SQP_settings.stepNum;
+            sqp_options["error_on_fail"] = false;
+
             for (const auto& option : basicOptions) {
                 sqp_options[option.first] = option.second;
             }
-            IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, basicOptions);
-            SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, basicOptions);
+            IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, ipopt_options);
+            SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, sqp_options);
             break;
         }
         case SolverSettings::SolverType::CUDA_SQP: {

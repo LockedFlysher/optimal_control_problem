@@ -1,7 +1,7 @@
 //
 // Created by lock on 25-3-11.
 //
-#include "sqp_solver/SQPOptimizationSolver.h"
+#include "optimal_control_problem/sqp_solver/SQPOptimizationSolver.h"
 #include <iostream>
 /*
  * 最小单步求解示例

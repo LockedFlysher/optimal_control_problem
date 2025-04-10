@@ -1,7 +1,7 @@
 //
 // Created by lock on 2025/2/17.
 //
-#include "sqp_solver/AutoDifferentiator.h"
+#include "optimal_control_problem/sqp_solver/AutoDifferentiator.h"
 
 AutoDifferentiator::AutoDifferentiator(const casadi::SX& variables, const casadi::SX& expression)
         : dim_(variables.size1())

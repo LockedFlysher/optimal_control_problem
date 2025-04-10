@@ -1,7 +1,7 @@
 #pragma once
 
-#include "sqp_solver/AutoDifferentiator.h"
-#include "sqp_solver/CuCaQP.h"
+#include "optimal_control_problem/sqp_solver/AutoDifferentiator.h"
+#include "optimal_control_problem/sqp_solver/CuCaQP.h"
 #include <yaml-cpp/yaml.h>
 #include "ament_index_cpp/get_package_share_directory.hpp"
 
