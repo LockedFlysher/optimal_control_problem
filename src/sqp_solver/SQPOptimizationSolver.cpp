@@ -8,11 +8,12 @@
  * */
 using namespace casadi;
 
-SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp, YAML::Node configNode) {
+SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict &nlp, ::casadi::Dict &options) {
     //加载SQP和ADMM的参数
+// todo : 使用Dict做option的传参
 
-    stepNum_ = configNode["solver_settings"]["ADMM_step"].as<int>();
-    alpha_ = configNode["solver_settings"]["SQP_step"].as<double>();
+    stepNum_ = options.at("max_iter").as_int();
+    alpha_ = options.at("alpha").as_double();
 
     // 必需参数
     if (nlp.find("f") == nlp.end()) {
@@ -54,12 +55,12 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict nlp, YAML::Node co
     localSystemFunction_ = Function("localSystemFunction", {reference, variables, l, u},
                                     {hessian, gradient, linearizedIneqConstraints[0], l_linearized, u_linearized});
     qpSolver_.setDimension(augmentedVariables.size1(), augmentedConstraints.size1());
-    qpSolver_.setVerbosity(true);
+    qpSolver_.setVerbosity(false);
     qpSolver_.setWarmStart(true);
 
     qpSolver_.setAbsoluteTolerance(1e-3);
     qpSolver_.setRelativeTolerance(1e-3);
-    qpSolver_.setMaxIteration(500);
+    qpSolver_.setMaxIteration(10000);
     result_ = {
             {"x", DM::zeros(variables.size1())},
             {"f", DM::zeros(1)}

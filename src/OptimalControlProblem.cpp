@@ -11,29 +11,35 @@ OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
     packagePath_ = ament_index_cpp::get_package_share_directory("optimal_control_problem");
     OCPConfigPtr_ = std::make_unique<OCPConfig>(configNode);
     configNode_ = configNode;
-    //    初始化reference0
-    genCode_ = configNode["solver_settings"]["gen_code"].as<bool>();
-    loadLib_ = configNode["solver_settings"]["load_lib"].as<bool>();
+    solverSettings.maxIter = configNode["solver_settings"]["max_iter"].as<int>();
+    solverSettings.warmStart = configNode["solver_settings"]["warm_start"].as<bool>();
+    solverSettings.SQP_settings.alpha = configNode["solver_settings"]["SQP_settings"]["alpha"].as<double>();
+    solverSettings.SQP_settings.stepNum = configNode["solver_settings"]["SQP_settings"]["step_num"].as<int>();
+
+    solverSettings.genCode = configNode["solver_settings"]["gen_code"].as<bool>();
+    //    todo load lib并没有起作用
+    solverSettings.loadLib = configNode["solver_settings"]["load_lib"].as<bool>();
 
     if (configNode["solver_settings"]["solve_method"].as<std::string>() == "IPOPT") {
-        setSolverType(SolverType::IPOPT);
+        setSolverType(SolverSettings::SolverType::IPOPT);
     }
     if (configNode["solver_settings"]["solve_method"].as<std::string>() == "MIXED") {
-        setSolverType(SolverType::MIXED);
+        setSolverType(SolverSettings::SolverType::MIXED);
     }
     if (configNode["solver_settings"]["solve_method"].as<std::string>() == "SQP") {
-        setSolverType(SolverType::SQP);
+        setSolverType(SolverSettings::SolverType::SQP);
     }
     if (configNode["solver_settings"]["solve_method"].as<std::string>() == "CUDA_SQP") {
-        setSolverType(SolverType::CUDA_SQP);
+        setSolverType(SolverSettings::SolverType::CUDA_SQP);
     }
     if (configNode["solver_settings"]["verbose"].as<bool>()) {
-        std::cout << "输出c代码且编译动态链接库：" << genCode_ << std::endl;
-        std::cout << "使用动态链接库对求解器进行加载：" << genCode_ << std::endl;
+        std::cout << "输出c代码且编译动态链接库：" << solverSettings.genCode << std::endl;
+        std::cout << "使用动态链接库对求解器进行加载：" << solverSettings.genCode << std::endl;
     }
+
 }
 
-void OptimalControlProblem::addCost(const casadi::SX &cost) {
+void OptimalControlProblem::addScalarCost(const casadi::SX &cost) {
     costs_.push_back(cost);
 }
 
@@ -88,16 +94,18 @@ casadi::SX OptimalControlProblem::getCostFunction() {
     return totalCost_;
 }
 
-void OptimalControlProblem::setSolverType(SolverType type) {
-    selectedSolver_ = type;
+void OptimalControlProblem::setSolverType(SolverSettings::SolverType type) {
+    solverSettings.solverType = type;
 }
 
-OptimalControlProblem::SolverType OptimalControlProblem::getSolverType() const {
-    return selectedSolver_;
+OptimalControlProblem::SolverSettings::SolverType OptimalControlProblem::getSolverType() const {
+    return solverSettings.solverType;
 }
 
 /*
  * note : 必需在应用约束和添加损失以后使用！！！！！！！
+ * 原则 ： solver一定要先生成
+ * 再进行gencode
  * */
 // todo : 需要在这里把问题SQP化，约束线性化，A\B矩阵都要作为参数放到ADMM求解器作为参数，问题就来了，A\B肯定是稀疏的才比较好求啊，
 void OptimalControlProblem::genSolver() {
@@ -117,37 +125,75 @@ void OptimalControlProblem::genSolver() {
             {"p", reference_}
     };
     // 设置求解器选项
-    ::casadi::Dict solver_opts;
-//    solver_opts["ipopt"] = ::casadi::Dict{
-//            {"warm_start_init_point", "yes"},
-//            {"warm_start_bound_push", 1e-8},
-//            {"warm_start_mult_bound_push", 1e-8},
-//            {"mu_init", 1e-5},
-//            {"bound_relax_factor", 1e-9},
-//            {"max_iter", 50}
-//    };
-    switch (selectedSolver_) {
-        case SolverType::IPOPT: {
-            IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
+    ::casadi::Dict basicOptions;
+//    basicOptions["print_level"] = solverSettings.verbose ? 1 : 0;
+//    basicOptions["max_iter"] = solverSettings.maxIter;
+    switch (solverSettings.solverType) {
+        case SolverSettings::SolverType::IPOPT: {
+            ::casadi::Dict ipopt_options;
+//            ipopt_options["warm_start_init_point"] = solverSettings.warmStart ? "yes" : "no";
+//            ipopt_options["warm_start_bound_push"] = 0.001;
+            // 将 basicOptions 中的键值对添加到 ipopt_options 中
+            for (const auto& option : basicOptions) {
+                ipopt_options[option.first] = option.second;
+            }
+            IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, ipopt_options);
+//            IPOPTSolver_.print_options();
+            break;
+
+        }
+        case SolverSettings::SolverType::SQP: {
+            casadi::Dict sqp_options;
+//            qpsol: 指定用于求解二次规划子问题的 QP 求解器，例如 'qpoases'、'osqp' 或 'nlpsol'。
+            sqp_options["qpsol"] = "qpoases";
+//            hessian_approximation: 设置 Hessian 矩阵的近似方法，可能包括 'exact'（精确 Hessian）或 'limited-memory'（如 BFGS 近似）。
+            sqp_options["hessian_approximation"] = "exact";
+            sqp_options["max_iter"] = solverSettings.SQP_settings.stepNum;
+            for (const auto& option : basicOptions) {
+                sqp_options[option.first] = option.second;
+            }
+            SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, sqp_options);
             break;
         }
-        case SolverType::SQP: {
-            SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
+        case SolverSettings::SolverType::MIXED: {
+
+            ::casadi::Dict ipopt_options;
+            ipopt_options["warm_start_init_point"] = solverSettings.warmStart ? "yes" : "no";
+            ipopt_options["warm_start_bound_push"] = 0.001;
+            // 将 basicOptions 中的键值对添加到 ipopt_options 中
+            for (const auto& option : basicOptions) {
+                ipopt_options[option.first] = option.second;
+            }
+            casadi::Dict sqp_options;
+
+            sqp_options["qpsol"] = "qpoases";
+//            hessian_approximation: 设置 Hessian 矩阵的近似方法，可能包括 'exact'（精确 Hessian）或 'limited-memory'（如 BFGS 近似）。
+            sqp_options["hessian_approximation"] = "exact";
+            sqp_options["max_iter"] = solverSettings.SQP_settings.stepNum;
+            for (const auto& option : basicOptions) {
+                sqp_options[option.first] = option.second;
+            }
+            IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, basicOptions);
+            SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, basicOptions);
             break;
         }
-        case SolverType::MIXED: {
-            IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, solver_opts);
-            SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_opts);
-            break;
-        }
-        case SolverType::CUDA_SQP: {
-            OSQPSolverPtr_ = std::make_shared<SQPOptimizationSolver>(nlp,configNode_);
+        case SolverSettings::SolverType::CUDA_SQP: {
+            casadi::Dict sqp_options;
+//            qpsol: 指定用于求解二次规划子问题的 QP 求解器，例如 'qpoases'、'osqp' 或 'nlpsol'。
+            sqp_options["qpsol"] = "cuda_sqp";
+//            hessian_approximation: 设置 Hessian 矩阵的近似方法，可能包括 'exact'（精确 Hessian）或 'limited-memory'（如 BFGS 近似）。
+            sqp_options["hessian_approximation"] = "exact";
+            sqp_options["max_iter"] = solverSettings.SQP_settings.stepNum;
+            sqp_options["alpha"] = solverSettings.SQP_settings.alpha;
+            for (const auto& option : basicOptions) {
+                sqp_options[option.first] = option.second;
+            }
+            OSQPSolverPtr_ = std::make_shared<SQPOptimizationSolver>(nlp, sqp_options);
             break;
         }
     }
-
-//        如果不生成c代码，那么直接返回
-    if (!genCode_) {
+    //        如果不生成c代码，那么直接返回
+    if (!solverSettings.genCode) {
         return;
     } else {
         // 文件路径设置
@@ -172,13 +218,13 @@ void OptimalControlProblem::genSolver() {
                 throw std::runtime_error("Failed to copy file content from " + src + " to " + dst);
             }
         };
-        // 修改后的编译函数，使用 this 指针访问 verbose_
+        // 修改后的编译函数，使用 this 指针访问 solverSettings.verbose
         auto compileLibrary = [this](const std::string &source_file,
                                      const std::string &output_file,
                                      const std::string &compile_flags) {
             std::string compile_cmd = "gcc " + compile_flags + " " + source_file + " -o " + output_file;
 
-            if (this->verbose_) {
+            if (solverSettings.verbose) {
                 std::cout << "Compiling with command: " << compile_cmd << std::endl;
             }
 
@@ -186,28 +232,58 @@ void OptimalControlProblem::genSolver() {
                 throw std::runtime_error("Compilation failed for " + source_file);
             }
 
-            if (this->verbose_) {
+            if (solverSettings.verbose) {
                 std::cout << "Successfully compiled " << output_file << std::endl;
             }
         };
         const std::string compile_flags = "-fPIC -shared -O3";
-        // 生成代码文件
-        const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
-        const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
-        const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
-        const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
-        IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
-        compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
-        copyFile(IPOPT_solver_source_file, IPOPT_target_file);
-        const std::string SQP_solver_file_name =  "SQP_nlp_code";
-        const std::string SQP_solver_source_file = SQP_solver_file_name + ".c";
-        const std::string SQP_target_file = code_dir + SQP_solver_source_file;
-        const std::string SQP_shared_lib = code_dir + SQP_solver_file_name + ".so";
-        SQPSolver_.generate_dependencies(SQP_solver_source_file);
-        compileLibrary(SQP_target_file, SQP_shared_lib, compile_flags);
-        copyFile(SQP_solver_source_file, SQP_target_file);
+        switch (solverSettings.solverType) {
+            case SolverSettings::SolverType::IPOPT: {
+                // 生成代码文件
+                const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
+                const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
+                const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
+                const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
+                IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
+                compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
+                copyFile(IPOPT_solver_source_file, IPOPT_target_file);
+                break;
+            }
+            case SolverSettings::SolverType::SQP: {
+                const std::string SQP_solver_file_name = "SQP_nlp_code";
+                const std::string SQP_solver_source_file = SQP_solver_file_name + ".c";
+                const std::string SQP_target_file = code_dir + SQP_solver_source_file;
+                const std::string SQP_shared_lib = code_dir + SQP_solver_file_name + ".so";
+                SQPSolver_.generate_dependencies(SQP_solver_source_file);
+                compileLibrary(SQP_target_file, SQP_shared_lib, compile_flags);
+                copyFile(SQP_solver_source_file, SQP_target_file);
+                break;
+            }
+            case SolverSettings::SolverType::MIXED: {
+//                两个都进行编译
+                const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
+                const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
+                const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
+                const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
+                IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
+                compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
+                copyFile(IPOPT_solver_source_file, IPOPT_target_file);
+                IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, basicOptions);
+                const std::string SQP_solver_file_name = "SQP_nlp_code";
+                const std::string SQP_solver_source_file = SQP_solver_file_name + ".c";
+                const std::string SQP_target_file = code_dir + SQP_solver_source_file;
+                const std::string SQP_shared_lib = code_dir + SQP_solver_file_name + ".so";
+                SQPSolver_.generate_dependencies(SQP_solver_source_file);
+                compileLibrary(SQP_target_file, SQP_shared_lib, compile_flags);
+                copyFile(SQP_solver_source_file, SQP_target_file);
+                break;
+            }
+            case SolverSettings::SolverType::CUDA_SQP: {
+                break;
+            }
+        }
         // 输出问题规模信息
-        if (verbose_) {
+        if (solverSettings.verbose) {
             const auto num_vars = vars.size1();
             const auto num_constraints = constraints.size1();
             const auto num_params = reference_.size1();
@@ -218,6 +294,7 @@ void OptimalControlProblem::genSolver() {
         }
     }
 }
+
 
 ::casadi::SX OptimalControlProblem::getReference() const {
     return reference_;
@@ -246,7 +323,7 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
     std::cout << "OCPConfigPtr_->getFrameSize()" << OCPConfigPtr_->getFrameSize();
     lbx(::casadi::Slice(0, OCPConfigPtr_->getFrameSize())) = frame;
     ubx(::casadi::Slice(0, OCPConfigPtr_->getFrameSize())) = frame;
-    if (verbose_) {
+    if (solverSettings.verbose) {
         std::cout << "变量下界:\n" << lbx << std::endl;
         std::cout << "变量上界:\n" << ubx << std::endl;
     }
@@ -276,27 +353,29 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
 
     // 2. 求解优化问题
     if (solverInputCheck(arg)) {
-        if (genCode_) {
+        if (solverSettings.genCode||solverSettings.loadLib) {
             if (firstTime_) {
                 // 使用生成的代码求解
                 libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
                                                    packagePath_ + "/code_gen/IPOPT_nlp_code.so");
                 libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
                                                  packagePath_ + "/code_gen/SQP_nlp_code.so");
-
                 res = libIPOPTSolver_(arg);
                 firstTime_ = false;
                 std::cout << "暖机完成，已取得当前的全局最优解\n";
             } else {
                 // 根据求解器类型选择不同的求解器
-                switch (selectedSolver_) {
-                    case SolverType::IPOPT:
+                switch (solverSettings.solverType) {
+                    case SolverSettings::SolverType::IPOPT:
+                        if(solverSettings.warmStart){
+//                            todo : 添加热启动设置
+                        }
                         res = libIPOPTSolver_(arg);
                         break;
-                    case SolverType::SQP:
+                    case SolverSettings::SolverType::SQP:
                         res = libSQPSolver_(arg);
                         break;
-                    case SolverType::CUDA_SQP:
+                    case SolverSettings::SolverType::CUDA_SQP:
                         res = OSQPSolverPtr_->getOptimalSolution(arg);
                         break;
                     default:
@@ -307,34 +386,34 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
         } else {
             if (firstTime_) {
                 // 根据求解器类型选择不同的求解器
-                switch (selectedSolver_) {
-                    case SolverType::IPOPT:
+                switch (solverSettings.solverType) {
+                    case SolverSettings::SolverType::IPOPT:
                         res = IPOPTSolver_(arg);
                         break;
-                    case SolverType::SQP:
+                    case SolverSettings::SolverType::SQP:
                         res = SQPSolver_(arg);
                         break;
-                    case SolverType::MIXED:
+                    case SolverSettings::SolverType::MIXED:
                         res = IPOPTSolver_(arg);
                         break;
-                    case SolverType::CUDA_SQP:
+                    case SolverSettings::SolverType::CUDA_SQP:
                         res = OSQPSolverPtr_->getOptimalSolution(arg);
                         break;
                 }
                 firstTime_ = false;
             } else {
                 // 根据求解器类型选择不同的求解器
-                switch (selectedSolver_) {
-                    case SolverType::IPOPT:
+                switch (solverSettings.solverType) {
+                    case SolverSettings::SolverType::IPOPT:
                         res = IPOPTSolver_(arg);
                         break;
-                    case SolverType::SQP:
+                    case SolverSettings::SolverType::SQP:
                         res = SQPSolver_(arg);
                         break;
-                    case SolverType::MIXED:
+                    case SolverSettings::SolverType::MIXED:
                         res = SQPSolver_(arg);
                         break;
-                    case SolverType::CUDA_SQP:
+                    case SolverSettings::SolverType::CUDA_SQP:
                         res = OSQPSolverPtr_->getOptimalSolution(arg);
                         break;
                 }
@@ -344,7 +423,7 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
         std::cout << "\n=================== 优化结果 ===================" << std::endl;
         std::cout << "目标函数值: " << res.at("f") << std::endl;
         optimalTrajectory_ = res.at("x");
-        if (verbose_) {
+        if (solverSettings.verbose) {
             std::cout << "最优解: " << res.at("x") << std::endl;
         }
         // saveResultsToCSV(res.at("x"));
@@ -389,7 +468,7 @@ bool OptimalControlProblem::solverInputCheck(std::map<std::string, ::casadi::DM>
         printDimensionMismatch("p", expected_p_size, arg["p"].size1());
         return false;
     }
-    if (verbose_) {
+    if (solverSettings.verbose) {
         std::cout << "所有维度检查通过。" << std::endl;
         std::cout << "lbg/ubg 维度: " << expected_lbg_ubg_size << std::endl;
         std::cout << "lbx/ubx/x0 维度: " << expected_lbx_ubx_x0_size << std::endl;
@@ -420,13 +499,13 @@ void OptimalControlProblem::setReference(const casadi::SX &reference) {
 
 ::casadi::DM OptimalControlProblem::getOptimalInputFirstFrame() {
     //根据你的命名来提取输入的变量
-    int inputFrameSize_ = OCPConfigPtr_->getVariable(0,"F").size1();
+    int inputFrameSize_ = OCPConfigPtr_->getVariable(0, "F").size1();
     const int variableSize = OCPConfigPtr_->getFrameSize();
     // 收集所有输入元素的索引
     std::vector<casadi_int> inputIndices;
     for (int i = 0; i < OCPConfigPtr_->getHorizon(); ++i) {
         int cycleStart = i * (variableSize);               // 当前周期的起始索引
-        int inputStart = cycleStart + variableSize-inputFrameSize_; // 当前周期内输入的起始索引
+        int inputStart = cycleStart + variableSize - inputFrameSize_; // 当前周期内输入的起始索引
         for (int j = 0; j < inputFrameSize_; ++j) {
             inputIndices.push_back(inputStart + j);   // 将输入索引逐个加入列表
         }
@@ -434,10 +513,39 @@ void OptimalControlProblem::setReference(const casadi::SX &reference) {
     // 提取所有输入元素
     ::casadi::DM inputs = optimalTrajectory_(inputIndices);
     std::cout << "输入的所有帧是" << std::endl;
-    std::cout<<inputs;
-    ::casadi::DM inputFirstFrame = inputs(::casadi::Slice(inputFrameSize_, 2*inputFrameSize_, 1));
+    std::cout << inputs;
+    ::casadi::DM inputFirstFrame = inputs(::casadi::Slice(inputFrameSize_, 2 * inputFrameSize_, 1));
     std::vector<double> vec;
     vec = inputFirstFrame.get_elements(); // 将所有元素复制到
     std::cout << "\n输出的第二帧是" << vec << std::endl;
     return ::casadi::DM(vec);
 }
+
+void OptimalControlProblem::addVectorCost(const casadi::DM &param, const SX &cost) {
+    if (param.size1() != cost.size1()) {
+        std::cout << "损失的符号向量和参数向量维度不一致\n";
+        return;
+    }
+    // 计算二次形式的标量损失: cost^T * diag(param) * cost
+    SX weightedCost = SX::zeros(1, 1);
+    for (int i = 0; i < cost.size1(); ++i) {
+        weightedCost += param(i).scalar() * cost(i) * cost(i);
+    }
+    // 将标量损失添加到总损失中
+    addScalarCost(weightedCost);
+}
+
+void OptimalControlProblem::addVectorCost(const std::vector<double> &param, const SX &cost) {
+    if (param.size() != cost.size1()) {
+        std::cout << "损失的符号向量和参数向量维度不一致\n";
+        exit(-5);
+    }
+    // 计算二次形式的标量损失: cost^T * diag(param) * cost
+    SX weightedCost = SX::zeros(1, 1);
+    for (int i = 0; i < cost.size1(); ++i) {
+        weightedCost += param[i] * cost(i) * cost(i);
+    }
+    // 将标量损失添加到总损失中
+    addScalarCost(weightedCost);
+}
+

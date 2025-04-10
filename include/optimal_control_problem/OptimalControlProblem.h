@@ -15,14 +15,32 @@
  * */
 class OptimalControlProblem {
 private:
-    enum class SolverType {
-        IPOPT,
-        SQP,
-        CUDA_SQP,
-        MIXED
+    class SolverSettings{
+    public:
+        enum class SolverType {
+            IPOPT,
+            SQP,
+            CUDA_SQP,
+            MIXED
+        };
+
+        struct SQPSettings{
+            double alpha{0.1};
+            int stepNum{10};
+        };
+
+        bool verbose{true};
+        bool genCode{false};
+        bool recompile{false};
+        bool loadLib{false};
+        bool warmStart{true};
+        int maxIter{1000};
+        SolverType solverType;
+        SQPSettings SQP_settings;
     };
 
     YAML::Node configNode_;
+    SolverSettings solverSettings;
 
     std::vector<casadi::SX> constraints_;
     std::vector<std::string> constraintNames_;
@@ -34,13 +52,9 @@ private:
     bool firstTime_{true};
     casadi::DM optimalTrajectory_;
     // OCP问题构建和求解的接口
-    bool genCode_{false};
-    bool loadLib_{false};
-    bool verbose_{true};
 
     std::string packagePath_;
 
-    SolverType selectedSolver_ = SolverType::IPOPT;  // IPOPT是默认的
     casadi::Function IPOPTSolver_;
     casadi::Function SQPSolver_;
     casadi::Function libIPOPTSolver_;
@@ -55,8 +69,8 @@ private:
 public:
     std::unique_ptr<OCPConfig> OCPConfigPtr_;
     // 添加设置求解器类型的方法
-    void setSolverType(SolverType type);
-    SolverType getSolverType() const;
+    void setSolverType(SolverSettings::SolverType type);
+    SolverSettings::SolverType getSolverType() const;
 public:
     casadi::SX getReference() const;
     /*
@@ -86,9 +100,11 @@ public:
      * */
     explicit OptimalControlProblem(YAML::Node);
     /*
-     * costFunction是从这里进行
+     * costFunction是从这里添加的
      * */
-    void addCost(const casadi::SX &cost);
+    void addScalarCost(const casadi::SX &cost);
+    void addVectorCost(const casadi::DM &param,const casadi::SX &cost);
+    void addVectorCost(const std::vector<double> &param, const SX &cost);
     /*
      * 添加不等式约束其实是一个通用的函数，是添加等式约束的基础函数
      * */
@@ -116,6 +132,8 @@ public:
      * 检查变量的维度
      * */
     bool solverInputCheck(std::map<std::string, casadi::DM> arg) const;
+
+    void genCode();
 };
 
 std::ostream &operator<<(std::ostream &os, const OptimalControlProblem &ocp);

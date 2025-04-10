@@ -14,7 +14,8 @@ public:
 * @retval None
 */
 
-    explicit SQPOptimizationSolver(::casadi::SXDict nlp,YAML::Node);
+    explicit SQPOptimizationSolver(::casadi::SXDict &nlp, ::casadi::Dict &options);
+
 /**
 * @brief SQP求解
 * @note 如果是MPC问题初始点是通过限制第一项的lbx和ubx来完成的，和OptimalControlProblem一致
@@ -25,13 +26,13 @@ public:
 
 private:
     //    其实我不太确定这里到底需要多少个自动微分器
-    std::shared_ptr <AutoDifferentiator> objectiveFunctionAutoDifferentiatorPtr_;
-    std::shared_ptr <AutoDifferentiator> constraintsAutoDifferentiator_;
+    std::shared_ptr<AutoDifferentiator> objectiveFunctionAutoDifferentiatorPtr_;
+    std::shared_ptr<AutoDifferentiator> constraintsAutoDifferentiator_;
     CuCaQP qpSolver_;
 
     int stepNum_;
-//    LineSearch使用到的
     double alpha_;
+
     DMDict result_;
 
     casadi::DM lowerBounds_;
