@@ -15,6 +15,7 @@ OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
     solverSettings.warmStart = configNode["solver_settings"]["warm_start"].as<bool>();
     solverSettings.SQP_settings.alpha = configNode["solver_settings"]["SQP_settings"]["alpha"].as<double>();
     solverSettings.SQP_settings.stepNum = configNode["solver_settings"]["SQP_settings"]["step_num"].as<int>();
+    solverSettings.verbose = configNode["solver_settings"]["verbose"].as<bool>();
 
     solverSettings.genCode = configNode["solver_settings"]["gen_code"].as<bool>();
     //    todo load lib并没有起作用
@@ -32,7 +33,7 @@ OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
     if (configNode["solver_settings"]["solve_method"].as<std::string>() == "CUDA_SQP") {
         setSolverType(SolverSettings::SolverType::CUDA_SQP);
     }
-    if (configNode["solver_settings"]["verbose"].as<bool>()) {
+    if (solverSettings.verbose) {
         std::cout << "输出c代码且编译动态链接库：" << solverSettings.genCode << std::endl;
         std::cout << "使用动态链接库对求解器进行加载：" << solverSettings.genCode << std::endl;
     }
@@ -126,13 +127,17 @@ void OptimalControlProblem::genSolver() {
     };
     // 设置求解器选项
     ::casadi::Dict basicOptions;
-//    basicOptions["print_level"] = solverSettings.verbose ? 1 : 0;
-//    basicOptions["max_iter"] = solverSettings.maxIter;
+    basicOptions["verbose"] = solverSettings.verbose ? 1 : 0;
+//    可以提高求解的效率，但是同时开启变慢
+//    basicOptions["jit"] = true;
     switch (solverSettings.solverType) {
         case SolverSettings::SolverType::IPOPT: {
             ::casadi::Dict ipopt_options;
-//            ipopt_options["warm_start_init_point"] = solverSettings.warmStart ? "yes" : "no";
-//            ipopt_options["warm_start_bound_push"] = 0.001;
+//            ipopt_options["print_level"] = 0;      // 静默模式
+//            ipopt_options["max_iter"] = solverSettings.maxIter;      // 最大迭代次数
+//            ipopt_options["tol"] = 1e-6;           // 收敛容差
+//            ipopt_options["acceptable_tol"] = 1e-4; // 可接受的容差
+//            ipopt_options["linear_solver"] = "mumps"; // 线性求解器选择
             // 将 basicOptions 中的键值对添加到 ipopt_options 中
             for (const auto& option : basicOptions) {
                 ipopt_options[option.first] = option.second;
@@ -320,7 +325,6 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
     // 设置变量和约束的上下界
     ::casadi::DM lbx = ::casadi::DM::vertcat(OCPConfigPtr_->getLowerBounds());
     ::casadi::DM ubx = ::casadi::DM::vertcat(OCPConfigPtr_->getUpperBounds());
-    std::cout << "OCPConfigPtr_->getFrameSize()" << OCPConfigPtr_->getFrameSize();
     lbx(::casadi::Slice(0, OCPConfigPtr_->getFrameSize())) = frame;
     ubx(::casadi::Slice(0, OCPConfigPtr_->getFrameSize())) = frame;
     if (solverSettings.verbose) {
@@ -351,25 +355,41 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
     }
     arg["p"] = reference;
 
-    // 2. 求解优化问题
+    // 2. 求解优化问题，如果使用代码生成则使用编译好的库
     if (solverInputCheck(arg)) {
         if (solverSettings.genCode||solverSettings.loadLib) {
             if (firstTime_) {
                 // 使用生成的代码求解
-                libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
-                                                   packagePath_ + "/code_gen/IPOPT_nlp_code.so");
-                libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
-                                                 packagePath_ + "/code_gen/SQP_nlp_code.so");
-                res = libIPOPTSolver_(arg);
+                switch (solverSettings.solverType) {
+                    case SolverSettings::SolverType::IPOPT:
+                        libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
+                                                           packagePath_ + "/code_gen/IPOPT_nlp_code.so");
+                        res = libIPOPTSolver_(arg);
+                        break;
+                    case SolverSettings::SolverType::SQP:
+                        libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
+                                                         packagePath_ + "/code_gen/SQP_nlp_code.so");
+                        res = libSQPSolver_(arg);
+                        break;
+                    case SolverSettings::SolverType::MIXED:
+                        libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
+                                                           packagePath_ + "/code_gen/IPOPT_nlp_code.so");
+                        libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
+                                                         packagePath_ + "/code_gen/SQP_nlp_code.so");
+                        res = libIPOPTSolver_(arg);
+                        break;
+                    default:
+                        libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
+                                                           packagePath_ + "/code_gen/IPOPT_nlp_code.so");
+                        res = libIPOPTSolver_(arg);
+                        break;
+                }
                 firstTime_ = false;
                 std::cout << "暖机完成，已取得当前的全局最优解\n";
             } else {
                 // 根据求解器类型选择不同的求解器
                 switch (solverSettings.solverType) {
                     case SolverSettings::SolverType::IPOPT:
-                        if(solverSettings.warmStart){
-//                            todo : 添加热启动设置
-                        }
                         res = libIPOPTSolver_(arg);
                         break;
                     case SolverSettings::SolverType::SQP:
@@ -426,8 +446,6 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
         if (solverSettings.verbose) {
             std::cout << "最优解: " << res.at("x") << std::endl;
         }
-        // saveResultsToCSV(res.at("x"));
-
     } else {
         std::cerr << "求解器输入检查失败" << std::endl;
     }
