@@ -208,6 +208,12 @@ void OptimalControlProblem::genSolver() {
     if (!solverSettings.genCode) {
         return;
     } else {
+        //保存localSystemFunction_.save("localSystemFunction.casadi")
+        casadi::Function localSystemFunction = OSQPSolverPtr_->getSXLocalSystemFunction();
+        // std::string CUSADIpath_ = ament_index_cpp::get_package_share_directory("cusadi");
+        localSystemFunction.save("/home/andew/project/NEBULA_ws/src/Cusadi-SQP/function/localSystemFunction.casadi");
+        std::cout << OSQPSolverPtr_->getSXLocalSystemFunction() << std::endl;
+        std::cout << "LocalSystemFunction is saved" << std::endl;
         // 文件路径设置
         const std::string code_dir = packagePath_ + "/code_gen/";
         // 确保目标目录存在
