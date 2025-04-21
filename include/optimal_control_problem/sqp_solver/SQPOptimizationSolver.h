@@ -23,6 +23,7 @@ public:
 * @retval DMDict result
 */
     casadi::DMDict getOptimalSolution(const DMDict &arg);
+casadi::Function getSXLocalSystemFunction() const;
 
 private:
     //    其实我不太确定这里到底需要多少个自动微分器

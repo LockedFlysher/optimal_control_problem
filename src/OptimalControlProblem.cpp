@@ -4,6 +4,7 @@
 
 #include "optimal_control_problem/OptimalControlProblem.h"
 #include <iostream>
+#include <rclcpp/logging.hpp>
 
 //通过解析yaml文件，初始化dt、horizon,创建系统状态和输入变量
 OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
@@ -133,11 +134,11 @@ void OptimalControlProblem::genSolver() {
     switch (solverSettings.solverType) {
         case SolverSettings::SolverType::IPOPT: {
             ::casadi::Dict ipopt_options;
-//            ipopt_options["print_level"] = 0;      // 静默模式
-//            ipopt_options["max_iter"] = solverSettings.maxIter;      // 最大迭代次数
-//            ipopt_options["tol"] = 1e-6;           // 收敛容差
-//            ipopt_options["acceptable_tol"] = 1e-4; // 可接受的容差
-//            ipopt_options["linear_solver"] = "mumps"; // 线性求解器选择
+            // ipopt_options["print_level"] = 0;      // 静默模式
+            // ipopt_options["max_iter"] = solverSettings.maxIter;      // 最大迭代次数
+            // ipopt_options["tol"] = 1e-6;           // 收敛容差
+            // ipopt_options["acceptable_tol"] = 1e-4; // 可接受的容差
+            // ipopt_options["linear_solver"] = "mumps"; // 线性求解器选择
             // 将 basicOptions 中的键值对添加到 ipopt_options 中
             for (const auto& option : basicOptions) {
                 ipopt_options[option.first] = option.second;
@@ -207,6 +208,12 @@ void OptimalControlProblem::genSolver() {
     if (!solverSettings.genCode) {
         return;
     } else {
+        //保存localSystemFunction_.save("localSystemFunction.casadi")
+        casadi::Function localSystemFunction = OSQPSolverPtr_->getSXLocalSystemFunction();
+        // std::string CUSADIpath_ = ament_index_cpp::get_package_share_directory("cusadi");
+        localSystemFunction.save("/home/andew/project/NEBULA_ws/src/Cusadi-SQP/function/localSystemFunction.casadi");
+        std::cout << OSQPSolverPtr_->getSXLocalSystemFunction() << std::endl;
+        std::cout << "LocalSystemFunction is saved" << std::endl;
         // 文件路径设置
         const std::string code_dir = packagePath_ + "/code_gen/";
         // 确保目标目录存在
@@ -256,8 +263,9 @@ void OptimalControlProblem::genSolver() {
                 const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
                 const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
                 IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
-                compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
                 copyFile(IPOPT_solver_source_file, IPOPT_target_file);
+                compileLibrary(IPOPT_target_file, IPOPT_shared_lib, compile_flags);
+                // copyFile(IPOPT_solver_source_file, IPOPT_target_file);
                 break;
             }
             case SolverSettings::SolverType::SQP: {

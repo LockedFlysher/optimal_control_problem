@@ -117,3 +117,7 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
 //    std::cout << "  f = " << result_.at("f") << std::endl;
     return result_;
 }
+
+casadi::Function SQPOptimizationSolver::getSXLocalSystemFunction() const {
+    return localSystemFunction_;
+}
