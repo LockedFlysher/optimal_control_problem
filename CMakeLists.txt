@@ -4,6 +4,10 @@ cmake_minimum_required(VERSION 3.21)
 project(optimal_control_problem)
 # 查找ament_cmake包（ROS2基础构建系统）
 find_package(ament_cmake REQUIRED)
+find_package(pybind11_vendor REQUIRED)
+find_package(pybind11 REQUIRED)
+find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
+include_directories(${Python3_INCLUDE_DIRS})
 link_directories(/usr/local/cuda/lib64)
 
 ##################################################################################################
@@ -29,10 +33,13 @@ set(dependencies
         Eigen3      # Eigen矩阵运算库
         yaml-cpp    # YAML配置文件解析库
         OsqpEigen
+        pybind11_vendor
+        pybind11
 )
 
 # 设置ROS包依赖
 set(parent_packages
+
         rclcpp
         ament_index_cpp
 )
@@ -50,6 +57,17 @@ set(${TARGET1}_TYPE "LIBRARY")
 aux_source_directory(src ${TARGET1}_SOURCES)
 aux_source_directory(src/OCP_config ${TARGET1}_SOURCES)
 aux_source_directory(src/sqp_solver ${TARGET1}_SOURCES)
+aux_source_directory(src/pybind ${TARGET1}_SOURCES)
+# 生成pybind接口
+# 生成pybind接口
+set(TARGET2 "optimal_control_problem_pybind")
+set(${TARGET2}_TYPE "PYBIND")
+aux_source_directory(src PYBIND_SOURCES)
+aux_source_directory(src/OCP_config PYBIND_SOURCES)
+aux_source_directory(src/sqp_solver PYBIND_SOURCES)
+aux_source_directory(src/pybind PYBIND_SOURCES)
+pybind11_add_module(${TARGET2} ${PYBIND_SOURCES})
+
 
 #set(TARGET2 "test_sqp")
 #set(${TARGET2}_TYPE "EXECUTABLE")
@@ -61,7 +79,7 @@ aux_source_directory(src/sqp_solver ${TARGET1}_SOURCES)
 # 将所有目标名称添加到列表中
 set(ALL_TARGETS
         ${TARGET1}
-#        ${TARGET2}
+        ${TARGET2}
         # 在此添加更多目标
 )
 
@@ -136,6 +154,17 @@ foreach (TARGET_NAME IN LISTS ALL_TARGETS)
         )
         ament_export_libraries(${PROJECT_NAME})
 
+    elseif (${${TARGET_NAME}_TYPE} STREQUAL "PYBIND")
+        # 添加库目标 - 使用关键字语法
+        target_link_libraries(${TARGET_NAME} PRIVATE
+                ${CASADI_LIBRARIES}  # CasADi
+                yaml-cpp             # YAML-CPP
+                OsqpEigen::OsqpEigen
+                /usr/local/cuda/lib64/libcublas.so
+                /usr/local/cuda/lib64/libcusparse.so
+        )
+
+
     elseif (${${TARGET_NAME}_TYPE} STREQUAL "INTERFACE")
         # 接口库不需要源文件
         add_library(${TARGET_NAME} INTERFACE)
@@ -143,7 +172,7 @@ foreach (TARGET_NAME IN LISTS ALL_TARGETS)
     endif ()
 
     # 如果不是接口库，设置依赖
-    if (NOT ${${TARGET_NAME}_TYPE} STREQUAL "INTERFACE")
+    if (NOT ${${TARGET_NAME}_TYPE} STREQUAL "INTERFACE" AND NOT ${${TARGET_NAME}_TYPE} STREQUAL "PYBIND" )
         # 用户定义： 系统库依赖
         target_link_libraries(${TARGET_NAME}
                 ${CASADI_LIBRARIES}  # CasADi
