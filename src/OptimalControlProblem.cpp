@@ -3,8 +3,6 @@
 //
 
 #include "optimal_control_problem/OptimalControlProblem.h"
-#include <iostream>
-#include <rclcpp/logging.hpp>
 
 //通过解析yaml文件，初始化dt、horizon,创建系统状态和输入变量
 OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
