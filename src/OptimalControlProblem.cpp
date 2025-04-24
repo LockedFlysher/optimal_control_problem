@@ -74,6 +74,7 @@ bool OptimalControlProblem::checkDirectoryPermissions(const std::string& path) {
     }
 }
 
+
 void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, const ::casadi::DM &reference) {
     if (frame.size1() != OCPConfigPtr_->getFrameSize()) {
         throw std::invalid_argument("State dimension mismatch: received " +
@@ -115,7 +116,6 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
     if (!solverInputCheck(arg)) {
         throw std::runtime_error("Solver input validation failed");
     }
-
     try {
         if (solverSettings.genCode || solverSettings.loadLib) {
             if (firstTime_) {
@@ -241,29 +241,49 @@ void OptimalControlProblem::genSolver() {
 
     ::casadi::Dict basicOptions;
     basicOptions["verbose"] = solverSettings.verbose ? 1 : 0;
-    basicOptions["jit"] = true;
+    basicOptions["jit"] = false;  // 临时禁用JIT以避免代码生成时的冲突
 
+    // 获取当前工作目录的绝对路径
+    std::filesystem::path current_path = std::filesystem::current_path();
     const std::string code_dir = packagePath_ + "/code_gen/";
-    if (!checkDirectoryPermissions(code_dir)) {
-        throw std::runtime_error("Cannot create or write to code generation directory: " + code_dir);
+
+    // 确保code_dir是绝对路径
+    std::filesystem::path code_dir_abs = std::filesystem::absolute(code_dir);
+
+    if (!checkDirectoryPermissions(code_dir_abs.string())) {
+        throw std::runtime_error("Cannot create or write to code generation directory: " + code_dir_abs.string());
     }
 
     try {
         switch (solverSettings.solverType) {
             case SolverSettings::SolverType::IPOPT: {
                 ::casadi::Dict ipopt_options = basicOptions;
-                IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, ipopt_options);
+                IPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt", nlp, ipopt_options);
 
                 if (solverSettings.genCode) {
-                    const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
-                    const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
-                    const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
-                    const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
+                    // 使用当前目录的绝对路径
+                    std::filesystem::path temp_source = current_path / "ipopt_temp.c";
+                    std::filesystem::path target_source = code_dir_abs / "IPOPT_nlp_code.c";
+                    std::filesystem::path target_lib = code_dir_abs / "IPOPT_nlp_code.so";
 
-                    IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
-                    std::filesystem::copy_file(IPOPT_solver_source_file, IPOPT_target_file,
+                    if (solverSettings.verbose) {
+                        std::cout << "Generating IPOPT solver code at: " << temp_source << std::endl;
+                    }
+
+                    // 在当前目录生成临时文件
+                    IPOPTSolver_.generate_dependencies(temp_source.string());
+
+                    // 验证临时文件生成
+                    if (!std::filesystem::exists(temp_source)) {
+                        throw std::runtime_error("Failed to generate IPOPT source file at: " + temp_source.string());
+                    }
+
+                    // 移动到目标目录
+                    std::filesystem::copy_file(temp_source, target_source,
                                                std::filesystem::copy_options::overwrite_existing);
-                    compileLibrary(IPOPT_target_file, IPOPT_shared_lib, "-fPIC -shared -O3");
+                    std::filesystem::remove(temp_source);
+
+                    compileLibrary(target_source.string(), target_lib.string(), "-fPIC -shared -O3");
                 }
                 break;
             }
@@ -280,25 +300,35 @@ void OptimalControlProblem::genSolver() {
                     sqp_options[option.first] = option.second;
                 }
 
-                SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, solver_options);
+                SQPSolver_ = ::casadi::nlpsol("sqp_solver", "sqpmethod", nlp, solver_options);
 
                 if (solverSettings.genCode) {
-                    const std::string SQP_solver_file_name = "SQP_nlp_code";
-                    const std::string SQP_solver_source_file = SQP_solver_file_name + ".c";
-                    const std::string SQP_target_file = code_dir + SQP_solver_source_file;
-                    const std::string SQP_shared_lib = code_dir + SQP_solver_file_name + ".so";
+                    std::filesystem::path temp_source = current_path / "sqp_temp.c";
+                    std::filesystem::path target_source = code_dir_abs / "SQP_nlp_code.c";
+                    std::filesystem::path target_lib = code_dir_abs / "SQP_nlp_code.so";
 
-                    SQPSolver_.generate_dependencies(SQP_solver_source_file);
-                    std::filesystem::copy_file(SQP_solver_source_file, SQP_target_file,
+                    if (solverSettings.verbose) {
+                        std::cout << "Generating SQP solver code at: " << temp_source << std::endl;
+                    }
+
+                    SQPSolver_.generate_dependencies(temp_source.string());
+
+                    if (!std::filesystem::exists(temp_source)) {
+                        throw std::runtime_error("Failed to generate SQP source file at: " + temp_source.string());
+                    }
+
+                    std::filesystem::copy_file(temp_source, target_source,
                                                std::filesystem::copy_options::overwrite_existing);
-                    compileLibrary(SQP_target_file, SQP_shared_lib, "-fPIC -shared -O3");
+                    std::filesystem::remove(temp_source);
+
+                    compileLibrary(target_source.string(), target_lib.string(), "-fPIC -shared -O3");
                 }
                 break;
             }
             case SolverSettings::SolverType::MIXED: {
                 // IPOPT配置
                 ::casadi::Dict ipopt_options = basicOptions;
-                IPOPTSolver_ = ::casadi::nlpsol("solver", "ipopt", nlp, ipopt_options);
+                IPOPTSolver_ = ::casadi::nlpsol("mixed_ipopt_solver", "ipopt", nlp, ipopt_options);
 
                 // SQP配置
                 casadi::Dict sqp_options;
@@ -311,30 +341,50 @@ void OptimalControlProblem::genSolver() {
                     sqp_options[option.first] = option.second;
                 }
 
-                SQPSolver_ = ::casadi::nlpsol("solver", "sqpmethod", nlp, sqp_options);
+                SQPSolver_ = ::casadi::nlpsol("mixed_sqp_solver", "sqpmethod", nlp, sqp_options);
 
                 if (solverSettings.genCode) {
                     // 生成IPOPT代码
-                    const std::string IPOPT_solver_file_name = "IPOPT_nlp_code";
-                    const std::string IPOPT_solver_source_file = IPOPT_solver_file_name + ".c";
-                    const std::string IPOPT_target_file = code_dir + IPOPT_solver_source_file;
-                    const std::string IPOPT_shared_lib = code_dir + IPOPT_solver_file_name + ".so";
+                    std::filesystem::path ipopt_temp = current_path / "mixed_ipopt_temp.c";
+                    std::filesystem::path ipopt_target = code_dir_abs / "IPOPT_nlp_code.c";
+                    std::filesystem::path ipopt_lib = code_dir_abs / "IPOPT_nlp_code.so";
 
-                    IPOPTSolver_.generate_dependencies(IPOPT_solver_source_file);
-                    std::filesystem::copy_file(IPOPT_solver_source_file, IPOPT_target_file,
+                    if (solverSettings.verbose) {
+                        std::cout << "Generating mixed IPOPT solver code at: " << ipopt_temp << std::endl;
+                    }
+
+                    IPOPTSolver_.generate_dependencies(ipopt_temp.string());
+
+                    if (!std::filesystem::exists(ipopt_temp)) {
+                        throw std::runtime_error("Failed to generate IPOPT source file at: " + ipopt_temp.string());
+                    }
+
+                    std::filesystem::copy_file(ipopt_temp, ipopt_target,
                                                std::filesystem::copy_options::overwrite_existing);
-                    compileLibrary(IPOPT_target_file, IPOPT_shared_lib, "-fPIC -shared -O3");
+                    std::filesystem::remove(ipopt_temp);
+
+                    compileLibrary(ipopt_target.string(), ipopt_lib.string(), "-fPIC -shared -O3");
 
                     // 生成SQP代码
-                    const std::string SQP_solver_file_name = "SQP_nlp_code";
-                    const std::string SQP_solver_source_file = SQP_solver_file_name + ".c";
-                    const std::string SQP_target_file = code_dir + SQP_solver_source_file;
-                    const std::string SQP_shared_lib = code_dir + SQP_solver_file_name + ".so";
+                    std::filesystem::path sqp_temp = current_path / "mixed_sqp_temp.c";
+                    std::filesystem::path sqp_target = code_dir_abs / "SQP_nlp_code.c";
+                    std::filesystem::path sqp_lib = code_dir_abs / "SQP_nlp_code.so";
 
-                    SQPSolver_.generate_dependencies(SQP_solver_source_file);
-                    std::filesystem::copy_file(SQP_solver_source_file, SQP_target_file,
+                    if (solverSettings.verbose) {
+                        std::cout << "Generating mixed SQP solver code at: " << sqp_temp << std::endl;
+                    }
+
+                    SQPSolver_.generate_dependencies(sqp_temp.string());
+
+                    if (!std::filesystem::exists(sqp_temp)) {
+                        throw std::runtime_error("Failed to generate SQP source file at: " + sqp_temp.string());
+                    }
+
+                    std::filesystem::copy_file(sqp_temp, sqp_target,
                                                std::filesystem::copy_options::overwrite_existing);
-                    compileLibrary(SQP_target_file, SQP_shared_lib, "-fPIC -shared -O3");
+                    std::filesystem::remove(sqp_temp);
+
+                    compileLibrary(sqp_target.string(), sqp_lib.string(), "-fPIC -shared -O3");
                 }
                 break;
             }
@@ -352,9 +402,25 @@ void OptimalControlProblem::genSolver() {
 
                 if (solverSettings.genCode) {
                     casadi::Function localSystemFunction = OSQPSolverPtr_->getSXLocalSystemFunction();
-                    localSystemFunction.save(code_dir + "localSystemFunction.casadi");
+                    std::filesystem::path temp_file = current_path / "localSystemFunction_temp.casadi";
+                    std::filesystem::path target_file = code_dir_abs / "localSystemFunction.casadi";
+
                     if (solverSettings.verbose) {
-                        std::cout << "LocalSystemFunction is saved" << std::endl;
+                        std::cout << "Saving LocalSystemFunction at: " << temp_file << std::endl;
+                    }
+
+                    localSystemFunction.save(temp_file.string());
+
+                    if (!std::filesystem::exists(temp_file)) {
+                        throw std::runtime_error("Failed to save LocalSystemFunction at: " + temp_file.string());
+                    }
+
+                    std::filesystem::copy_file(temp_file, target_file,
+                                               std::filesystem::copy_options::overwrite_existing);
+                    std::filesystem::remove(temp_file);
+
+                    if (solverSettings.verbose) {
+                        std::cout << "LocalSystemFunction saved successfully to: " << target_file << std::endl;
                     }
                 }
                 break;
@@ -374,12 +440,6 @@ void OptimalControlProblem::genSolver() {
         throw std::runtime_error("Failed to generate solver: " + std::string(e.what()));
     }
 }
-
-// 其他函数保持不变...
-
-
-
-
 
 void OptimalControlProblem::addScalarCost(const casadi::SX &cost) {
     costs_.push_back(cost);
@@ -509,30 +569,6 @@ casadi::DMVector OptimalControlProblem::getConstraintUpperBounds() const {
 
 void OptimalControlProblem::setReference(const casadi::SX &reference) {
     reference_ = reference;
-}
-
-::casadi::DM OptimalControlProblem::getOptimalInputFirstFrame() {
-    //根据你的命名来提取输入的变量
-    int inputFrameSize_ = OCPConfigPtr_->getVariable(0, "F").size1();
-    const int variableSize = OCPConfigPtr_->getFrameSize();
-    // 收集所有输入元素的索引
-    std::vector<casadi_int> inputIndices;
-    for (int i = 0; i < OCPConfigPtr_->getHorizon(); ++i) {
-        int cycleStart = i * (variableSize);               // 当前周期的起始索引
-        int inputStart = cycleStart + variableSize - inputFrameSize_; // 当前周期内输入的起始索引
-        for (int j = 0; j < inputFrameSize_; ++j) {
-            inputIndices.push_back(inputStart + j);   // 将输入索引逐个加入列表
-        }
-    }
-    // 提取所有输入元素
-    ::casadi::DM inputs = optimalTrajectory_(inputIndices);
-    std::cout << "输入的所有帧是" << std::endl;
-    std::cout << inputs;
-    ::casadi::DM inputFirstFrame = inputs(::casadi::Slice(inputFrameSize_, 2 * inputFrameSize_, 1));
-    std::vector<double> vec;
-    vec = inputFirstFrame.get_elements(); // 将所有元素复制到
-    std::cout << "\n输出的第二帧是" << vec << std::endl;
-    return ::casadi::DM(vec);
 }
 
 void OptimalControlProblem::addVectorCost(const casadi::DM &param, const SX &cost) {

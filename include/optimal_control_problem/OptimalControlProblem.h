@@ -76,7 +76,6 @@ public:
 
     void genSolver();
     void computeOptimalTrajectory(const casadi::DM &frame, const casadi::DM &reference);
-    ::casadi::DM getOptimalInputFirstFrame();
 
     void setReference(const casadi::SX& reference);
 
