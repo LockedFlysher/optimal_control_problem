@@ -271,7 +271,7 @@ void OptimalControlProblem::genSolver() {
                     }
 
                     // 在当前目录生成临时文件
-                    IPOPTSolver_.generate_dependencies(temp_source.string());
+                    IPOPTSolver_.generate_dependencies("ipopt_temp.c");
 
                     // 验证临时文件生成
                     if (!std::filesystem::exists(temp_source)) {
@@ -311,7 +311,7 @@ void OptimalControlProblem::genSolver() {
                         std::cout << "Generating SQP solver code at: " << temp_source << std::endl;
                     }
 
-                    SQPSolver_.generate_dependencies(temp_source.string());
+                    SQPSolver_.generate_dependencies("sqp_temp.c");
 
                     if (!std::filesystem::exists(temp_source)) {
                         throw std::runtime_error("Failed to generate SQP source file at: " + temp_source.string());
@@ -353,7 +353,7 @@ void OptimalControlProblem::genSolver() {
                         std::cout << "Generating mixed IPOPT solver code at: " << ipopt_temp << std::endl;
                     }
 
-                    IPOPTSolver_.generate_dependencies(ipopt_temp.string());
+                    IPOPTSolver_.generate_dependencies("mixed_ipopt_temp.c");
 
                     if (!std::filesystem::exists(ipopt_temp)) {
                         throw std::runtime_error("Failed to generate IPOPT source file at: " + ipopt_temp.string());
@@ -374,7 +374,7 @@ void OptimalControlProblem::genSolver() {
                         std::cout << "Generating mixed SQP solver code at: " << sqp_temp << std::endl;
                     }
 
-                    SQPSolver_.generate_dependencies(sqp_temp.string());
+                    SQPSolver_.generate_dependencies("mixed_sqp_temp.c");
 
                     if (!std::filesystem::exists(sqp_temp)) {
                         throw std::runtime_error("Failed to generate SQP source file at: " + sqp_temp.string());
