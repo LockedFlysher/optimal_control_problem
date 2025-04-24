@@ -39,7 +39,6 @@ set(dependencies
 
 # 设置ROS包依赖
 set(parent_packages
-
         rclcpp
         ament_index_cpp
 )

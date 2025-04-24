@@ -25,7 +25,7 @@
 
 #include "yaml-cpp/yaml.h"
 #include "casadi/casadi.hpp"
-#include "ament_index_cpp/get_package_share_directory.hpp"
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 // Frame是用来记录状态和输入变量的结构体，包括总大小、字段名称和偏移量等信息。
 struct Frame {
