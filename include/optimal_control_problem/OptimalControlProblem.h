@@ -38,7 +38,6 @@ private:
         SolverType solverType;
         SQPSettings SQP_settings;
     };
-
     YAML::Node configNode_;
     SolverSettings solverSettings;
 
@@ -71,6 +70,7 @@ public:
     // 添加设置求解器类型的方法
     void setSolverType(SolverSettings::SolverType type);
     SolverSettings::SolverType getSolverType() const;
+
 public:
     casadi::SX getReference() const;
     /*

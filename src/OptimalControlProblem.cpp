@@ -127,17 +127,11 @@ void OptimalControlProblem::genSolver() {
     // 设置求解器选项
     ::casadi::Dict basicOptions;
     basicOptions["verbose"] = solverSettings.verbose ? 1 : 0;
-//    可以提高求解的效率，但是同时开启变慢
-//    basicOptions["jit"] = true;
+    //    可以提高求解的效率，但是同时开启变慢
+    basicOptions["jit"] = true;
     switch (solverSettings.solverType) {
         case SolverSettings::SolverType::IPOPT: {
             ::casadi::Dict ipopt_options;
-            // ipopt_options["print_level"] = 0;      // 静默模式
-            // ipopt_options["max_iter"] = solverSettings.maxIter;      // 最大迭代次数
-            // ipopt_options["tol"] = 1e-6;           // 收敛容差
-            // ipopt_options["acceptable_tol"] = 1e-4; // 可接受的容差
-            // ipopt_options["linear_solver"] = "mumps"; // 线性求解器选择
-            // 将 basicOptions 中的键值对添加到 ipopt_options 中
             for (const auto& option : basicOptions) {
                 ipopt_options[option.first] = option.second;
             }
@@ -151,11 +145,11 @@ void OptimalControlProblem::genSolver() {
             Dict solver_options;
             sqp_options["error_on_fail"] = false;
 //            qpsol: 指定用于求解二次规划子问题的 QP 求解器，例如 'qpoases'、'osqp' 或 'nlpsol'。
-            solver_options["qpsol"] = "nlpsol";
+            solver_options["qpsol"] = "qpoases";
             solver_options["qpsol_options"] = sqp_options;
             sqp_options["error_on_fail"] = false;
 //            hessian_approximation: 设置 Hessian 矩阵的近似方法，可能包括 'exact'（精确 Hessian）或 'limited-memory'（如 BFGS 近似）。
-            sqp_options["hessian_approximation"] = "limited-memory";
+            sqp_options["hessian_approximation"] = "exact";
             sqp_options["max_iter"] = solverSettings.SQP_settings.stepNum;
             for (const auto& option : basicOptions) {
                 sqp_options[option.first] = option.second;
@@ -166,8 +160,6 @@ void OptimalControlProblem::genSolver() {
         case SolverSettings::SolverType::MIXED: {
 
             ::casadi::Dict ipopt_options;
-            ipopt_options["warm_start_init_point"] = solverSettings.warmStart ? "yes" : "no";
-            ipopt_options["warm_start_bound_push"] = 0.001;
             // 将 basicOptions 中的键值对添加到 ipopt_options 中
             for (const auto& option : basicOptions) {
                 ipopt_options[option.first] = option.second;
@@ -176,9 +168,9 @@ void OptimalControlProblem::genSolver() {
 
             sqp_options["qpsol"] = "qpoases";
 //            hessian_approximation: 设置 Hessian 矩阵的近似方法，可能包括 'exact'（精确 Hessian）或 'limited-memory'（如 BFGS 近似）。
+            sqp_options["error_on_fail"] = false;
             sqp_options["hessian_approximation"] = "exact";
             sqp_options["max_iter"] = solverSettings.SQP_settings.stepNum;
-            sqp_options["error_on_fail"] = false;
 
             for (const auto& option : basicOptions) {
                 sqp_options[option.first] = option.second;
@@ -189,10 +181,8 @@ void OptimalControlProblem::genSolver() {
         }
         case SolverSettings::SolverType::CUDA_SQP: {
             casadi::Dict sqp_options;
-//            qpsol: 指定用于求解二次规划子问题的 QP 求解器，例如 'qpoases'、'osqp' 或 'nlpsol'。
             sqp_options["qpsol"] = "cuda_sqp";
 //            hessian_approximation: 设置 Hessian 矩阵的近似方法，可能包括 'exact'（精确 Hessian）或 'limited-memory'（如 BFGS 近似）。
-            sqp_options["hessian_approximation"] = "exact";
             sqp_options["max_iter"] = solverSettings.SQP_settings.stepNum;
             sqp_options["alpha"] = solverSettings.SQP_settings.alpha;
             for (const auto& option : basicOptions) {
@@ -206,12 +196,6 @@ void OptimalControlProblem::genSolver() {
     if (!solverSettings.genCode) {
         return;
     } else {
-        //保存localSystemFunction_.save("localSystemFunction.casadi")
-        casadi::Function localSystemFunction = OSQPSolverPtr_->getSXLocalSystemFunction();
-        // std::string CUSADIpath_ = ament_index_cpp::get_package_share_directory("cusadi");
-        localSystemFunction.save("/home/andew/project/NEBULA_ws/src/Cusadi-SQP/function/localSystemFunction.casadi");
-        std::cout << OSQPSolverPtr_->getSXLocalSystemFunction() << std::endl;
-        std::cout << "LocalSystemFunction is saved" << std::endl;
         // 文件路径设置
         const std::string code_dir = packagePath_ + "/code_gen/";
         // 确保目标目录存在
@@ -296,6 +280,11 @@ void OptimalControlProblem::genSolver() {
                 break;
             }
             case SolverSettings::SolverType::CUDA_SQP: {
+                casadi::Function localSystemFunction = OSQPSolverPtr_->getSXLocalSystemFunction();
+                // std::string CUSADIpath_ = ament_index_cpp::get_package_share_directory("cusadi");
+                localSystemFunction.save(code_dir+"localSystemFunction.casadi");
+                std::cout << OSQPSolverPtr_->getSXLocalSystemFunction() << std::endl;
+                std::cout << "LocalSystemFunction is saved" << std::endl;
                 break;
             }
         }
