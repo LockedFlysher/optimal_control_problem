@@ -4,8 +4,7 @@ cmake_minimum_required(VERSION 3.21)
 project(optimal_control_problem)
 # 查找ament_cmake包（ROS2基础构建系统）
 find_package(ament_cmake REQUIRED)
-find_package(pybind11_vendor REQUIRED)
-find_package(pybind11 REQUIRED)
+
 find_package(Python3 COMPONENTS Interpreter Development REQUIRED)
 include_directories(${Python3_INCLUDE_DIRS})
 link_directories(/usr/local/cuda/lib64)
@@ -35,12 +34,14 @@ set(dependencies
         OsqpEigen
         pybind11_vendor
         pybind11
+        CUDA
 )
 
 # 设置ROS包依赖
 set(parent_packages
-        rclcpp
+        ament_cmake_python
         ament_index_cpp
+        rclcpp
 )
 
 ######################################## 构建目标配置 ########################################
@@ -56,29 +57,10 @@ set(${TARGET1}_TYPE "LIBRARY")
 aux_source_directory(src ${TARGET1}_SOURCES)
 aux_source_directory(src/OCP_config ${TARGET1}_SOURCES)
 aux_source_directory(src/sqp_solver ${TARGET1}_SOURCES)
-aux_source_directory(src/pybind ${TARGET1}_SOURCES)
-# 生成pybind接口
-# 生成pybind接口
-set(TARGET2 "optimal_control_problem_pybind")
-set(${TARGET2}_TYPE "PYBIND")
-aux_source_directory(src PYBIND_SOURCES)
-aux_source_directory(src/OCP_config PYBIND_SOURCES)
-aux_source_directory(src/sqp_solver PYBIND_SOURCES)
-aux_source_directory(src/pybind PYBIND_SOURCES)
-pybind11_add_module(${TARGET2} ${PYBIND_SOURCES})
-
-
-#set(TARGET2 "test_sqp")
-#set(${TARGET2}_TYPE "EXECUTABLE")
-#aux_source_directory(src ${TARGET2}_SOURCES)
-#aux_source_directory(src/OCP_config ${TARGET2}_SOURCES)
-#aux_source_directory(src/sqp_solver ${TARGET2}_SOURCES)
-#aux_source_directory(test ${TARGET2}_SOURCES)
 
 # 将所有目标名称添加到列表中
 set(ALL_TARGETS
         ${TARGET1}
-        ${TARGET2}
         # 在此添加更多目标
 )
 
@@ -174,12 +156,14 @@ foreach (TARGET_NAME IN LISTS ALL_TARGETS)
     if (NOT ${${TARGET_NAME}_TYPE} STREQUAL "INTERFACE" AND NOT ${${TARGET_NAME}_TYPE} STREQUAL "PYBIND" )
         # 用户定义： 系统库依赖
         target_link_libraries(${TARGET_NAME}
-                ${CASADI_LIBRARIES}  # CasADi
-                yaml-cpp             # YAML-CPP
-                OsqpEigen::OsqpEigen
-                /usr/local/cuda/lib64/libcublas.so
-                /usr/local/cuda/lib64/libcusparse.so
-        )
+                                ${CASADI_LIBRARIES}
+                                yaml-cpp
+                                OsqpEigen::OsqpEigen
+                                ${CUDA_LIBRARIES}
+                                ${CUDA_cublas_LIBRARY}
+                                ${CUDA_cusparse_LIBRARY}
+                            )
+
         ament_target_dependencies(${TARGET_NAME} ${parent_packages})
     endif ()
 endforeach ()
