@@ -21,15 +21,27 @@ make -j8
 sudo make install
 ```
 
-下载OSQP与OSQP-Eigen依赖
 ```shell
-git clone https://github.com/osqp/osqp.git
-git clone https://github.com/robotology/osqp-eigen.git
+# 下载OSQP与OSQP-Eigen依赖
+mkdir ~/installation
+cd ~/installation
+git clone https://github.com/LockedFlysher/OSQP.git -b master
+git clone https://github.com/LockedFlysher/OSQP_Eigen.git -b master
 ```
-修改cpu_install.sh和cuda_install.sh的路径为上述包的安装路径
+
+使用脚本编译并安装OSQP和OSQP-Eigen，根据需求选择使用CUDA版本或者CPU版本
+```shell
+cd your/workspace/path/src
+git clone https://github.com/LockedFlysher/optimal_control_problem.git -b master
+```
+修改cpu_install.sh和cuda_install.sh的路径为上述OSQP包和OSQP-Eigen的路径
+```shell
+cd optimal_control_problem
+sh cpu_install.sh
+```
 
 ## 配置示例（YAML）
-optimal_control_problem的构造函数参数为一个YAML::Node，示例如下
+optimal_control_problem的构造函数参数为一个YAML::Node，词条示例如下
 ```yaml
 optimal_control_problem:
   discretization_settings:
@@ -50,10 +62,7 @@ optimal_control_problem:
 ```
 
 ## 主要贡献：
-
-- 使用新版的CUDA版本OSQP集成CasADi
-- 实现SQP系统矩阵更新
-
+- 实现SQP系统矩阵计算与更新，将结果赋给Eigen-OSQP，再利用OSQP的CUDA backend做显卡上的优化求解
 ---
 
 # OptimalControlProblem Class Documentation
