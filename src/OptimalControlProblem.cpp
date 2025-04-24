@@ -440,11 +440,11 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
                 }
             }
         }
-        // 3. 输出结果
-        std::cout << "\n=================== 优化结果 ===================" << std::endl;
-        std::cout << "目标函数值: " << res.at("f") << std::endl;
         optimalTrajectory_ = res.at("x");
         if (solverSettings.verbose) {
+            // 3. 输出结果
+            std::cout << "\n=================== 优化结果 ===================" << std::endl;
+            std::cout << "目标函数值: " << res.at("f") << std::endl;
             std::cout << "最优解: " << res.at("x") << std::endl;
         }
     } else {

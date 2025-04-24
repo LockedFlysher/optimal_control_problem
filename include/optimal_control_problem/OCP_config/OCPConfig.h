@@ -79,7 +79,7 @@ public:
     /*
      * 传入的参数是optimal_control_problem的Node
      * */
-    OCPConfig(YAML::Node);
+    explicit OCPConfig(YAML::Node);
 
     ~OCPConfig() = default;
 };
