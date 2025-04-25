@@ -283,7 +283,7 @@ void OptimalControlProblem::genSolver() {
                                                std::filesystem::copy_options::overwrite_existing);
                     std::filesystem::remove(temp_source);
 
-                    compileLibrary(target_source.string(), target_lib.string(), "-fPIC -shared -O3");
+                    compileLibrary(target_source.string(), target_lib.string(), "-fPIC -shared -O1");
                 }
                 break;
             }
@@ -321,7 +321,7 @@ void OptimalControlProblem::genSolver() {
                                                std::filesystem::copy_options::overwrite_existing);
                     std::filesystem::remove(temp_source);
 
-                    compileLibrary(target_source.string(), target_lib.string(), "-fPIC -shared -O3");
+                    compileLibrary(target_source.string(), target_lib.string(), "-fPIC -shared -O1");
                 }
                 break;
             }
@@ -363,7 +363,7 @@ void OptimalControlProblem::genSolver() {
                                                std::filesystem::copy_options::overwrite_existing);
                     std::filesystem::remove(ipopt_temp);
 
-                    compileLibrary(ipopt_target.string(), ipopt_lib.string(), "-fPIC -shared -O3");
+                    compileLibrary(ipopt_target.string(), ipopt_lib.string(), "-fPIC -shared -O1");
 
                     // 生成SQP代码
                     std::filesystem::path sqp_temp = current_path / "mixed_sqp_temp.c";
@@ -384,7 +384,7 @@ void OptimalControlProblem::genSolver() {
                                                std::filesystem::copy_options::overwrite_existing);
                     std::filesystem::remove(sqp_temp);
 
-                    compileLibrary(sqp_target.string(), sqp_lib.string(), "-fPIC -shared -O3");
+                    compileLibrary(sqp_target.string(), sqp_lib.string(), "-fPIC -shared -O1");
                 }
                 break;
             }
