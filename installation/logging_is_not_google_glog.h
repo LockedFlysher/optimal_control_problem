@@ -227,7 +227,7 @@ INSTANTIATE_FOR_CONTAINER(std::set)
 #undef INSTANTIATE_FOR_CONTAINER
 
 
-#ifndef CASADI_MISTC_HPP
+#ifndef CASADI_MISC_HPP
 template <class First, class Second>
 inline std::ostream& operator<<(
     std::ostream& out,

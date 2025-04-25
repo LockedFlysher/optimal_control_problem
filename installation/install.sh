@@ -71,13 +71,9 @@ install_libtorch() {
         unzip -q $LIBTORCH_ZIP
     fi
 
-    # Apply patch only if the file doesn't exist yet
-    if [ ! -f "./libtorch/include/c10/util/logging_is_not_google_glog.h" ]; then
-        echo "Applying patch to libtorch..."
-        cp ./logging_is_not_google_glog.h ./libtorch/include/c10/util/logging_is_not_google_glog.h
-    else
-        echo "libtorch patch already applied. Skipping..."
-    fi
+
+    echo "Applying patch to libtorch..."
+    cp ./logging_is_not_google_glog.h ./libtorch/include/c10/util/logging_is_not_google_glog.h
 
     echo "Installing libtorch..."
     sudo cp -r ./libtorch/lib/* /usr/local/lib/
