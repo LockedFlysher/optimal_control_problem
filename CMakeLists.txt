@@ -175,6 +175,7 @@ foreach (SUBDIR ${SUBDIRS})
         if (NOT ${SUBDIR} STREQUAL "src" AND
                 NOT ${SUBDIR} STREQUAL "build" AND
                 NOT ${SUBDIR} STREQUAL ".git" AND
+                NOT ${SUBDIR} STREQUAL "installation" AND
                 NOT ${SUBDIR} STREQUAL "install")
             install(DIRECTORY
                     ${SUBDIR}
