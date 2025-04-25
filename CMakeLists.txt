@@ -35,6 +35,7 @@ set(dependencies
         pybind11_vendor
         pybind11
         CUDA
+        Torch
 )
 
 # 设置ROS包依赖
@@ -135,17 +136,6 @@ foreach (TARGET_NAME IN LISTS ALL_TARGETS)
         )
         ament_export_libraries(${PROJECT_NAME})
 
-    elseif (${${TARGET_NAME}_TYPE} STREQUAL "PYBIND")
-        # 添加库目标 - 使用关键字语法
-        target_link_libraries(${TARGET_NAME} PRIVATE
-                ${CASADI_LIBRARIES}  # CasADi
-                yaml-cpp             # YAML-CPP
-                OsqpEigen::OsqpEigen
-                /usr/local/cuda/lib64/libcublas.so
-                /usr/local/cuda/lib64/libcusparse.so
-        )
-
-
     elseif (${${TARGET_NAME}_TYPE} STREQUAL "INTERFACE")
         # 接口库不需要源文件
         add_library(${TARGET_NAME} INTERFACE)
@@ -162,6 +152,7 @@ foreach (TARGET_NAME IN LISTS ALL_TARGETS)
                                 ${CUDA_LIBRARIES}
                                 ${CUDA_cublas_LIBRARY}
                                 ${CUDA_cusparse_LIBRARY}
+                                ${TORCH_LIBRARIES}
                             )
 
         ament_target_dependencies(${TARGET_NAME} ${parent_packages})

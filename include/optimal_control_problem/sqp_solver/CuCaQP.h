@@ -4,6 +4,7 @@
 
 #include <OsqpEigen/OsqpEigen.h>
 #include "casadi/casadi.hpp"
+#include "torch/script.h"
 #include <eigen3/Eigen/Dense>
 
 using namespace casadi;
