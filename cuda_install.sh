@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # 配置路径
-OSQP_SRC_DIR="/home/andew/tool/osqp-v1.0.0.beta1-src"
+OSQP_SRC_DIR="/home/lock/project/NEBULA_ws/src/optimal_control_problem/installation/OSQP"
 OSQP_BUILD_DIR="${OSQP_SRC_DIR}/build"
-OSQP_EIGEN_SRC_DIR="/home/andew/tool/osqp-eigen-0.9.0"
+OSQP_EIGEN_SRC_DIR="/home/lock/project/NEBULA_ws/src/optimal_control_problem/installation/OSQP_Eigen"
 OSQP_EIGEN_BUILD_DIR="${OSQP_EIGEN_SRC_DIR}/build"
 
 # 安装结果状态
