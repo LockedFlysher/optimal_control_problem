@@ -20,22 +20,27 @@ cmake -DWITH_PYTHON=ON -DWITH_PYTHON3=ON -DWITH_IPOPT=ON -DWITH_QPOASES=ON -DWIT
 make -j8
 sudo make install
 ```
-
-```shell
-# 下载OSQP与OSQP-Eigen依赖
-mkdir ~/installation
-cd ~/installation
-git clone https://github.com/LockedFlysher/OSQP.git -b master
-git clone https://github.com/LockedFlysher/OSQP_Eigen.git -b master
-```
-
 使用脚本编译并安装OSQP和OSQP-Eigen，根据需求选择使用CUDA版本或者CPU版本
 ```shell
 cd your/workspace/path/src
 git clone https://github.com/LockedFlysher/optimal_control_problem.git -b master
+cd optimal_control_problem
+# libtorch用于系统矩阵的更新，但是要做代码修改
+wget https://download.pytorch.org/libtorch/cu126/libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu126.zip
+unzip libtorch-cxx11-abi-shared-with-deps-2.7.0+cu126.zip
+cp $(pwd)/combat_files/logging_is_not_google_glog.h $(pwd)/libtorch/include/c10/utils/logging_is_not_google_glog.h
+sudo cp -r $(pwd)/libtorch/lib/* /usr/local/lib/
+sudo cp -r $(pwd)/libtorch/include/* /usr/local/include/
+sudo cp -r $(pwd)/libtorch/share/* /usr/local/share/
+sudo ldconfig
+sudo rm -r libtorch
+git clone https://github.com/LockedFlysher/OSQP.git -b master
+cd OSQP 
+git clone https://github.com/LockedFlysher/OSQP_Eigen.git -b master
 ```
 修改cpu_install.sh和cuda_install.sh的路径为上述OSQP包和OSQP-Eigen的路径
 ```shell
+# 下载OSQP与OSQP-Eigen依赖
 cd optimal_control_problem
 sh cpu_install.sh
 ```
