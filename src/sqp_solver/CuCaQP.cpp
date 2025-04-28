@@ -1,4 +1,4 @@
-#include "optimal_control_problem/sqp_solver/CuCaQP.h" // 修复了双斜杠问题
+#include "optimal_control_problem/sqp_solver/CuCaQP.h"
 #include <iostream>
 #include <iomanip> // 用于格式化输出
 
@@ -54,8 +54,33 @@ bool CuCaQP::setHessianMatrix(const casadi::DM &hessian) {
     return result;
 }
 
+bool CuCaQP::setHessianMatrix(const torch::Tensor &hessian) {
+    // 先清理之前的Hessian矩阵
+    solver_.data()->clearHessianMatrix();
+
+    hessianMatrix = torchTensorToEigenSparse<OSQPFloat>(hessian);
+    if (hessianMatrix.rows() != numOfVariables_ || hessianMatrix.cols() != numOfVariables_) {
+        std::cerr << "Error: Hessian matrix dimensions mismatch. Expected "
+                  << numOfVariables_ << "x" << numOfVariables_ << std::endl;
+        return false;
+    }
+    bool result = solver_.data()->setHessianMatrix(hessianMatrix);
+    return result;
+}
+
 bool CuCaQP::setGradient(const casadi::DM &q) {
     gradient = casadiDMToEigenVector<OSQPFloat>(q);
+
+    if (gradient.size() != numOfVariables_) {
+        std::cerr << "Error: Gradient vector size mismatch. Expected " << numOfVariables_ << std::endl;
+        return false;
+    }
+    bool result = solver_.data()->setGradient(gradient);
+    return result;
+}
+
+bool CuCaQP::setGradient(const torch::Tensor &q) {
+    gradient = torchTensorToEigenVector<OSQPFloat>(q);
 
     if (gradient.size() != numOfVariables_) {
         std::cerr << "Error: Gradient vector size mismatch. Expected " << numOfVariables_ << std::endl;
@@ -81,8 +106,34 @@ bool CuCaQP::setLinearConstraintsMatrix(const DM &A) {
     return result;
 }
 
+bool CuCaQP::setLinearConstraintsMatrix(const torch::Tensor &A) {
+    // 先清理之前的线性约束矩阵
+    solver_.data()->clearLinearConstraintsMatrix();
+
+    linearConstraintMatrix = torchTensorToEigenSparse<OSQPFloat>(A);
+
+    if (linearConstraintMatrix.rows() != numOfConstraints_ || linearConstraintMatrix.cols() != numOfVariables_) {
+        std::cerr << "Error: Constraint matrix dimensions mismatch. Expected "
+                  << numOfConstraints_ << "x" << numOfVariables_ << std::endl;
+        return false;
+    }
+
+    bool result = solver_.data()->setLinearConstraintsMatrix(linearConstraintMatrix);
+    return result;
+}
+
 bool CuCaQP::setLowerBound(const casadi::DM &l) {
     lowerBound = casadiDMToEigenVector<OSQPFloat>(l);
+    if (lowerBound.size() != numOfConstraints_) {
+        std::cerr << "Error: Lower bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
+        return false;
+    }
+    bool result = solver_.data()->setLowerBound(lowerBound);
+    return result;
+}
+
+bool CuCaQP::setLowerBound(const torch::Tensor &l) {
+    lowerBound = torchTensorToEigenVector<OSQPFloat>(l);
     if (lowerBound.size() != numOfConstraints_) {
         std::cerr << "Error: Lower bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
         return false;
@@ -102,6 +153,16 @@ bool CuCaQP::setUpperBound(const casadi::DM &u) {
     return result;
 }
 
+bool CuCaQP::setUpperBound(const torch::Tensor &u) {
+    upperBound = torchTensorToEigenVector<OSQPFloat>(u);
+
+    if (upperBound.size() != numOfConstraints_) {
+        std::cerr << "Error: Upper bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
+        return false;
+    }
+    bool result = solver_.data()->setUpperBound(upperBound);
+    return result;
+}
 
 bool CuCaQP::updateHessianMatrix(const casadi::DM &hessian) {
     hessianMatrix = casadiDMToEigenSparse<OSQPFloat>(hessian);
@@ -115,8 +176,31 @@ bool CuCaQP::updateHessianMatrix(const casadi::DM &hessian) {
     return result;
 }
 
+bool CuCaQP::updateHessianMatrix(const torch::Tensor &hessian) {
+    hessianMatrix = torchTensorToEigenSparse<OSQPFloat>(hessian);
+
+    if (hessianMatrix.rows() != numOfVariables_ || hessianMatrix.cols() != numOfVariables_) {
+        std::cerr << "Error: Hessian matrix dimensions mismatch. Expected "
+                  << numOfVariables_ << "x" << numOfVariables_ << std::endl;
+        return false;
+    }
+    bool result = solver_.updateHessianMatrix(hessianMatrix);
+    return result;
+}
+
 bool CuCaQP::updateGradient(const casadi::DM &q) {
     gradient = casadiDMToEigenVector<OSQPFloat>(q);
+
+    if (gradient.size() != numOfVariables_) {
+        std::cerr << "Error: Gradient vector size mismatch. Expected " << numOfVariables_ << std::endl;
+        return false;
+    }
+    bool result = solver_.updateGradient(gradient);
+    return result;
+}
+
+bool CuCaQP::updateGradient(const torch::Tensor &q) {
+    gradient = torchTensorToEigenVector<OSQPFloat>(q);
 
     if (gradient.size() != numOfVariables_) {
         std::cerr << "Error: Gradient vector size mismatch. Expected " << numOfVariables_ << std::endl;
@@ -139,6 +223,19 @@ bool CuCaQP::updateLinearConstraintsMatrix(const DM &A) {
     return result;
 }
 
+bool CuCaQP::updateLinearConstraintsMatrix(const torch::Tensor &A) {
+    linearConstraintMatrix = torchTensorToEigenSparse<OSQPFloat>(A);
+
+    if (linearConstraintMatrix.rows() != numOfConstraints_ || linearConstraintMatrix.cols() != numOfVariables_) {
+        std::cerr << "Error: Constraint matrix dimensions mismatch. Expected "
+                  << numOfConstraints_ << "x" << numOfVariables_ << std::endl;
+        return false;
+    }
+
+    bool result = solver_.updateLinearConstraintsMatrix(linearConstraintMatrix);
+    return result;
+}
+
 bool CuCaQP::updateLowerBound(const casadi::DM &l) {
     lowerBound = casadiDMToEigenVector<OSQPFloat>(l);
     if (lowerBound.size() != numOfConstraints_) {
@@ -149,8 +246,29 @@ bool CuCaQP::updateLowerBound(const casadi::DM &l) {
     return result;
 }
 
+bool CuCaQP::updateLowerBound(const torch::Tensor &l) {
+    lowerBound = torchTensorToEigenVector<OSQPFloat>(l);
+    if (lowerBound.size() != numOfConstraints_) {
+        std::cerr << "Error: Lower bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
+        return false;
+    }
+    bool result = solver_.updateLowerBound(lowerBound);
+    return result;
+}
+
 bool CuCaQP::updateUpperBound(const casadi::DM &u) {
     upperBound = casadiDMToEigenVector<OSQPFloat>(u);
+
+    if (upperBound.size() != numOfConstraints_) {
+        std::cerr << "Error: Upper bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
+        return false;
+    }
+    bool result = solver_.updateUpperBound(upperBound);
+    return result;
+}
+
+bool CuCaQP::updateUpperBound(const torch::Tensor &u) {
+    upperBound = torchTensorToEigenVector<OSQPFloat>(u);
 
     if (upperBound.size() != numOfConstraints_) {
         std::cerr << "Error: Upper bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
@@ -223,6 +341,20 @@ casadi::DM CuCaQP::getSolutionAsDM() {
     return solution;
 }
 
+torch::Tensor CuCaQP::getSolutionAsTensor() {
+    Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> solution_float = solver_.getSolution();
+
+    // 创建一个torch::Tensor
+    torch::Tensor solution = torch::zeros({solution_float.rows()}, torch::kFloat32);
+
+    // 填充数据
+    for (int i = 0; i < solution_float.rows(); ++i) {
+        solution[i] = solution_float(i, 0);
+    }
+
+    return solution;
+}
+
 void CuCaQP::printSolverData() {
     // 直接访问OSQP内部数据
     const auto *osqpData = solver_.data()->getData();
@@ -287,6 +419,30 @@ void CuCaQP::setSystem(DMVector localSystem) {
     setUpperBound(localSystem[4]);
 }
 
+void CuCaQP::setSystem(const std::vector<torch::Tensor> &torchSystem) {
+    // 检查输入向量大小
+    if (torchSystem.size() != 5) {
+        std::cerr << "Error: Expected 5 tensors in the system vector." << std::endl;
+        return;
+    }
+
+    // 如果求解器已初始化，先清理
+    if (isInitialized_) {
+        solver_.clearSolver();
+        isInitialized_ = false;
+    }
+
+    // 清理所有矩阵
+    solver_.data()->clearHessianMatrix();
+    solver_.data()->clearLinearConstraintsMatrix();
+
+    // 设置新的系统参数
+    setHessianMatrix(torchSystem[0]);
+    setGradient(torchSystem[1]);
+    setLinearConstraintsMatrix(torchSystem[2]);
+    setLowerBound(torchSystem[3]);
+    setUpperBound(torchSystem[4]);
+}
 
 //##################################### 暂时用不上的函数 ##################################################
 bool CuCaQP::setHessianMatrix(const Eigen::SparseMatrix<OSQPFloat> &P) {
@@ -351,3 +507,4 @@ bool CuCaQP::setUpperBound(const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> &u)
     bool result = solver_.data()->setUpperBound(upperBound);
     return result;
 }
+
