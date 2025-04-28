@@ -15,7 +15,7 @@ link_directories(/usr/local/cuda/lib64)
 
 ######################################## 基础构建设置 ###########################################
 # 设置构建类型为RelWithDebInfo（带调试信息的发布版本）
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE RelWithDebInfo)
 # 导出编译命令，用于IDE和工具的代码补全
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -168,6 +168,9 @@ endforeach ()
 
 ######################################## 通用安装配置 ######################################
 # 安装头文件 / Install header files
+install(DIRECTORY
+        include/
+        DESTINATION include)
 install(DIRECTORY
         cusadi/
         DESTINATION share/${PROJECT_NAME}/)
