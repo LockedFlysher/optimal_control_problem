@@ -14,7 +14,7 @@ CusadiFunction::CusadiFunction(const casadi::Function& fn_casadi, int num_instan
         : fn_(fn_casadi), num_instances_(num_instances) {
     // 加载CUDA共享库
 //    auto packagePath =
-    std::string path = ament_index_cpp::get_package_share_directory("optimal_control_problem")+"/codegen/libLocalSystemFunction.so";
+    std::string path = ament_index_cpp::get_package_share_directory("optimal_control_problem")+"/script/cusadi/build/libLocalSystemFunction.so";
     lib_handle_ = dlopen(path.c_str(), RTLD_LAZY);
     if (!lib_handle_) {
         std::cerr << "dlopen failed: " << dlerror();

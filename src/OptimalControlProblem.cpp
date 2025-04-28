@@ -8,6 +8,8 @@
 #include <filesystem>
 #include <fstream>
 #include <unistd.h>
+#include <cstdlib>  // system调用python脚本
+
 
 OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
     try {
@@ -422,6 +424,15 @@ void OptimalControlProblem::genSolver() {
                     if (solverSettings.verbose) {
                         std::cout << "LocalSystemFunction saved successfully to: " << target_file << std::endl;
                     }
+                    const std::string cusadi_function_path = packagePath_ + "/script/cusadi/src/casadi_functions";
+                    std::filesystem::copy_file(target_file, cusadi_function_path,
+                           std::filesystem::copy_options::overwrite_existing);
+                    const std::string run_codegen_path = packagePath_ + "/script/cusadi/run_codegen.py";
+                    const std::string command = "python3 " + run_codegen_path + " --fn=localSystemFunction";
+                    int result = std::system(command.c_str());
+                    // 检查命令执行结果
+                    if (result != 0) {
+                        std::cerr << "错误：run_codegen脚本执行失败 (退出码 " << result << ")" << std::endl;
                 }
                 break;
             }
