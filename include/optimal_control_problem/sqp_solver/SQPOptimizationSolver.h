@@ -1,12 +1,12 @@
 #pragma once
 
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <yaml-cpp/yaml.h>
+#include <chrono> // 添加计时功能
 #include "optimal_control_problem/sqp_solver/AutoDifferentiator.h"
 #include "optimal_control_problem/cusadi_function/CusadiFunction.h"
 #include "optimal_control_problem/sqp_solver/CuCaQP.h"
-#include <yaml-cpp/yaml.h>
 #include <torch/script.h>
-#include <ament_index_cpp/get_package_share_directory.hpp>
-#include <chrono> // 添加计时功能
 
 class SQPOptimizationSolver {
 public:

@@ -13,20 +13,19 @@
 CusadiFunction::CusadiFunction(const casadi::Function& fn_casadi, int num_instances)
         : fn_(fn_casadi), num_instances_(num_instances) {
     // 加载CUDA共享库
-    std::string path = "/home/lyj/project/NEBULA_ws/src/cusadi_trial/cusadi/codegen/liblocalSystemFunction.so";
+//    auto packagePath =
+    std::string path = ament_index_cpp::get_package_share_directory("optimal_control_problem")+"/codegen/libLocalSystemFunction.so";
     lib_handle_ = dlopen(path.c_str(), RTLD_LAZY);
     if (!lib_handle_) {
         std::cerr << "dlopen failed: " << dlerror();
         std::exit(1);
     }
-
     // 获取评估函数指针
     eval_fn_ = reinterpret_cast<EvalFn>(dlsym(lib_handle_, "evaluate"));
     if (!eval_fn_) {
         std::cerr << "dlsym evaluate failed: " << dlerror();
         std::exit(1);
     }
-
     // 设置张量和工作空间
     setup();
 }

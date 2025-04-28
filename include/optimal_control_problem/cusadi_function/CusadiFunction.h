@@ -11,7 +11,7 @@
 //一定要先casadi再torch，// 否则会报错
 #include <casadi/casadi.hpp>
 #include <torch/torch.h>
-
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 class CusadiFunction {
 public:
