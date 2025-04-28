@@ -179,66 +179,83 @@ Eigen::SparseMatrix<T> torchTensorToEigenSparse(const torch::Tensor &torchMatrix
     int cols = cpuTensor.size(1);
 
     Eigen::SparseMatrix<T> eigenMatrix(rows, cols);
-    std::vector<Eigen::Triplet<T>> triplets;
 
-    // 如果是稠密张量，转换为稀疏表示
-    if (!cpuTensor.is_sparse()) {
-        // 对于稠密张量，遍历所有元素，只添加非零元素
-        auto accessor = cpuTensor.accessor<float, 2>();
-        for (int i = 0; i < rows; ++i) {
-            for (int j = 0; j < cols; ++j) {
-                float val = accessor[i][j];
-                if (std::abs(val) > 1e-10) { // 设置一个小的阈值来判断非零元素
-                    triplets.push_back(Eigen::Triplet<T>(i, j, static_cast<T>(val)));
-                }
-            }
-        }
-    } else {
-        // 对于稀疏张量，直接使用其稀疏表示
+    // 处理稀疏张量
+    if (cpuTensor.is_sparse()) {
         auto indices = cpuTensor._indices();
         auto values = cpuTensor._values();
 
-        auto indicesAccessor = indices.accessor<int64_t, 2>();
-        auto valuesAccessor = values.accessor<float, 1>();
+        // 直接获取数据指针，避免使用accessor
+        int64_t* indicesPtr = indices.data_ptr<int64_t>();
+        float* valuesPtr = values.data_ptr<float>();
 
-        for (int k = 0; k < values.size(0); ++k) {
-            int i = indicesAccessor[0][k];
-            int j = indicesAccessor[1][k];
-            float val = valuesAccessor[k];
-            triplets.push_back(Eigen::Triplet<T>(i, j, static_cast<T>(val)));
+        int nnz = values.size(0);
+        std::vector<Eigen::Triplet<T>> triplets(nnz);
+
+        for (int k = 0; k < nnz; ++k) {
+            int i = indicesPtr[k];
+            int j = indicesPtr[k + nnz]; // 第二行索引
+            triplets[k] = Eigen::Triplet<T>(i, j, static_cast<T>(valuesPtr[k]));
         }
+
+        eigenMatrix.setFromTriplets(triplets.begin(), triplets.end());
+    }
+        // 处理稠密张量 - 使用更高效的方法
+    else {
+        // 将稠密张量转换为稀疏格式
+        auto sparseTensor = cpuTensor.to_sparse();
+        auto indices = sparseTensor._indices();
+        auto values = sparseTensor._values();
+
+        // 直接获取数据指针
+        int64_t* indicesPtr = indices.data_ptr<int64_t>();
+        float* valuesPtr = values.data_ptr<float>();
+
+        int nnz = values.size(0);
+        std::vector<Eigen::Triplet<T>> triplets(nnz);
+
+        for (int k = 0; k < nnz; ++k) {
+            int i = indicesPtr[k];
+            int j = indicesPtr[k + nnz]; // 第二行索引
+            triplets[k] = Eigen::Triplet<T>(i, j, static_cast<T>(valuesPtr[k]));
+        }
+
+        eigenMatrix.setFromTriplets(triplets.begin(), triplets.end());
     }
 
-    eigenMatrix.setFromTriplets(triplets.begin(), triplets.end());
     eigenMatrix.makeCompressed();
-
     return eigenMatrix;
 }
+
 
 template<typename T>
 Eigen::Matrix<T, Eigen::Dynamic, 1> torchTensorToEigenVector(const torch::Tensor &torchVector) {
     // 确保输入是CPU张量
     auto cpuTensor = torchVector.to(torch::kCPU).contiguous();
 
-    // 确保张量是一维的
-    if (cpuTensor.dim() > 1) {
-        // 如果是2D张量且一个维度为1，则压缩为1D
-        if (cpuTensor.dim() == 2 && (cpuTensor.size(0) == 1 || cpuTensor.size(1) == 1)) {
-            cpuTensor = cpuTensor.squeeze();
-        } else {
-            throw std::runtime_error("Input tensor must be a vector (1D tensor)");
-        }
-    }
-
+    // 获取向量大小
     int size = cpuTensor.size(0);
 
     // 创建Eigen向量
     Eigen::Matrix<T, Eigen::Dynamic, 1> eigenVector(size);
 
-    // 填充数据
-    auto accessor = cpuTensor.accessor<float, 1>();
-    for (int i = 0; i < size; ++i) {
-        eigenVector(i) = static_cast<T>(accessor[i]);
+    // 直接复制内存
+    if (cpuTensor.dtype() == torch::kFloat32) {
+        float* dataPtr = cpuTensor.data_ptr<float>();
+        Eigen::Map<Eigen::Matrix<float, Eigen::Dynamic, 1>> eigenMap(dataPtr, size);
+        eigenVector = eigenMap.cast<T>();
+    }
+    else if (cpuTensor.dtype() == torch::kFloat64) {
+        double* dataPtr = cpuTensor.data_ptr<double>();
+        Eigen::Map<Eigen::Matrix<double, Eigen::Dynamic, 1>> eigenMap(dataPtr, size);
+        eigenVector = eigenMap.cast<T>();
+    }
+    else {
+        // 对于其他数据类型，使用逐元素复制
+        auto accessor = cpuTensor.accessor<float, 1>();
+        for (int i = 0; i < size; ++i) {
+            eigenVector(i) = static_cast<T>(accessor[i]);
+        }
     }
 
     return eigenVector;
