@@ -58,6 +58,7 @@ set(${TARGET1}_TYPE "LIBRARY")
 aux_source_directory(src ${TARGET1}_SOURCES)
 aux_source_directory(src/OCP_config ${TARGET1}_SOURCES)
 aux_source_directory(src/sqp_solver ${TARGET1}_SOURCES)
+aux_source_directory(src/cusadi_function ${TARGET1}_SOURCES)
 
 # 将所有目标名称添加到列表中
 set(ALL_TARGETS
