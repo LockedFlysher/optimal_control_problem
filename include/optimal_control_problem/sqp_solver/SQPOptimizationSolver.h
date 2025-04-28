@@ -23,12 +23,20 @@ public:
     ~SQPOptimizationSolver() = default;
 
     /**
-     * @brief SQP求解方法
+     * @brief SQP求解方法 (CasADi接口)
      * @note 如果是MPC问题初始点是通过限制第一项的lbx和ubx来完成的，和OptimalControlProblem一致
      * @param arg <string,DM>字典，用到了lbx,ubx,lbg,ubg,p(可选)
      * @retval DMDict result 包含最优解x和目标函数值f
      */
     casadi::DMDict getOptimalSolution(const casadi::DMDict &arg);
+
+    /**
+     * @brief SQP求解方法 (LibTorch接口)
+     * @param arg 输入参数字典，包含lbx,ubx,lbg,ubg,p(可选)的torch::Tensor
+     * @retval 包含最优解x和目标函数值f的torch::Tensor字典
+     */
+    std::map<std::string, torch::Tensor> getOptimalSolutionTensor(
+            const std::map<std::string, torch::Tensor> &arg);
 
     /**
      * @brief 获取局部系统函数
@@ -57,6 +65,7 @@ private:
 
     // 优化结果
     casadi::DMDict result_;
+    std::map<std::string, torch::Tensor> resultTensor_;
 
     // 约束边界
     casadi::DM lowerBounds_;
@@ -75,9 +84,30 @@ private:
 
 private:
     /**
-     * @brief 获取局部系统
+     * @brief 获取局部系统 (CasADi版本)
      * @param arg 输入参数字典
      * @return 局部系统的DMVector
      */
     casadi::DMVector getLocalSystem(const casadi::DMDict &arg);
+
+    /**
+     * @brief 获取局部系统 (LibTorch版本)
+     * @param arg 输入参数字典
+     * @return 局部系统的torch::Tensor向量
+     */
+    std::vector<torch::Tensor> getLocalSystemTensor(const std::map<std::string, torch::Tensor> &arg);
+
+    /**
+     * @brief 将CasADi DM转换为torch::Tensor
+     * @param dm CasADi DM矩阵或向量
+     * @return 转换后的torch::Tensor
+     */
+    torch::Tensor dmToTensor(const casadi::DM &dm);
+
+    /**
+     * @brief 将torch::Tensor转换为CasADi DM
+     * @param tensor torch::Tensor
+     * @return 转换后的CasADi DM
+     */
+    casadi::DM tensorToDM(const torch::Tensor &tensor);
 };

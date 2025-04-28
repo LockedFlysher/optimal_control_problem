@@ -7,7 +7,7 @@
 int main() {
     // 1. 加载 CasADi 函数
     //ToDO casadi的方程的路径（后面整合改）
-    std::string casadi_file = "/home/lyj/project/NEBULA_ws/src/cusadi_trial/cusadi/src/casadi_functions/QuadraticProblem.casadi";
+    std::string casadi_file = "/home/lock/project/NEBULA_ws/src/optimal_control_problem/code_gen/QuadraticProblem.casadi";
     casadi::Function fn = casadi::Function::load(casadi_file);
     std::cout<<"Loaded CasADi function: "<<fn.name()<<"\n";
 
