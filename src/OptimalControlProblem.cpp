@@ -235,10 +235,10 @@ void OptimalControlProblem::genSolver() {
     }
 
     ::casadi::SXDict nlp = {
-            {"x", vars},
-            {"f", getCostFunction()},
-            {"g", constraints},
-            {"p", reference_}
+        {"x", vars},
+        {"f", getCostFunction()},
+        {"g", constraints},
+        {"p", reference_}
     };
 
     ::casadi::Dict basicOptions;
@@ -424,30 +424,39 @@ void OptimalControlProblem::genSolver() {
                     if (solverSettings.verbose) {
                         std::cout << "LocalSystemFunction saved successfully to: " << target_file << std::endl;
                     }
-                    const std::string cusadi_function_path = packagePath_ + "/script/cusadi/src/casadi_functions";
+                    const std::string cusadi_function_path = packagePath_ + "/script/cusadi/src/casadi_functions/localSystemFunction.casadi";
                     std::filesystem::copy_file(target_file, cusadi_function_path,
                            std::filesystem::copy_options::overwrite_existing);
+                    if (!std::filesystem::exists(cusadi_function_path)) {
+                        throw std::runtime_error("Failed to cp LocalSystemFunction from"+target_file.string()+"to : " + cusadi_function_path);
+                    }
                     const std::string run_codegen_path = packagePath_ + "/script/cusadi/run_codegen.py";
                     const std::string command = "python3 " + run_codegen_path + " --fn=localSystemFunction";
                     int result = std::system(command.c_str());
                     // 检查命令执行结果
                     if (result != 0) {
-                        std::cerr << "错误：run_codegen脚本执行失败 (退出码 " << result << ")" << std::endl;
+                        std::cerr << "Failed to run script(run_codegen.py),exit " << result << "" << std::endl;
+                        throw std::runtime_error("Failed to run script(run_codegen.py),exit " + result);
+
+                        if (solverSettings.verbose) {
+                            std::cout << "LocalSystemFunction successfully gen cuda code: " << packagePath_+"/script/cusadi/build/libLocalSystemFunction.so" << std::endl;
+                        }
+                    }
+                    break;
                 }
-                break;
+            }
+
+            if (solverSettings.verbose) {
+                const auto num_vars = vars.size1();
+                const auto num_constraints = constraints.size1();
+                const auto num_params = reference_.size1();
+                std::cout << "Problem dimensions:\n"
+                          << "Variables: " << num_vars << "\n"
+                          << "Constraints: " << num_constraints << "\n"
+                          << "Parameters: " << num_params << std::endl;
             }
         }
-
-        if (solverSettings.verbose) {
-            const auto num_vars = vars.size1();
-            const auto num_constraints = constraints.size1();
-            const auto num_params = reference_.size1();
-            std::cout << "Problem dimensions:\n"
-                      << "Variables: " << num_vars << "\n"
-                      << "Constraints: " << num_constraints << "\n"
-                      << "Parameters: " << num_params << std::endl;
-        }
-    } catch (const std::exception& e) {
+    }catch (const std::exception& e) {
         throw std::runtime_error("Failed to generate solver: " + std::string(e.what()));
     }
 }
