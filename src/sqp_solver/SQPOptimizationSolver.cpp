@@ -137,7 +137,7 @@ std::vector<torch::Tensor> SQPOptimizationSolver::getLocalSystemTensor(
     for (const auto &pair: arg) {
         casadiArg[pair.first] = tensorToDM(pair.second);
     }
-std::vector<torch::Tensor> localSystemTensor;
+    std::vector<torch::Tensor> localSystemTensor;
     // 使用CasADi版本获取局部系统
 //    DMVector localSystem = getLocalSystem(casadiArg);
 //    TODO : inference
@@ -155,11 +155,13 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
     if (verbose_) {
         std::cout << "=== SQP优化开始 ===" << std::endl;
         std::cout << "最大迭代次数: " << stepNum_ << ", 步长因子: " << alpha_ << std::endl;
+
     }
 
     auto totalStartTime = high_resolution_clock::now();
     double totalQpSolveTime = 0.0;
     double totalLocalSystemTime = 0.0;
+    double totalConvertingTime = 0.0;
 
     for (int i = 0; i < stepNum_; ++i) {
         if (verbose_) {
@@ -180,7 +182,16 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
 
         // 设置并求解QP问题
         auto qpStartTime = high_resolution_clock::now();
+
+        // 计算局部系统时间
+        auto convertingStartTime = high_resolution_clock::now();
         qpSolver_.setSystem(localSystem);
+        auto convertingEndTIme = high_resolution_clock::now();
+        double convertingTime = duration_cast<microseconds>(convertingEndTIme - convertingStartTime).count() / 1000.0;
+        totalConvertingTime += convertingTime;
+        if (verbose_) {
+            std::cout << "  系统数据类型转换计算时间: " << convertingTime << " ms" << std::endl;
+        }
         qpSolver_.initSolver();
         qpSolver_.solve();
         auto qpEndTime = high_resolution_clock::now();
@@ -233,6 +244,9 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
         std::cout << "总耗时: " << totalTime << " ms" << std::endl;
         std::cout << "局部系统计算总时间: " << totalLocalSystemTime << " ms ("
                   << std::fixed << std::setprecision(1) << (totalLocalSystemTime / totalTime * 100) << "%)"
+                  << std::endl;
+        std::cout << "数据类型转换时间: " << totalConvertingTime << " ms ("
+                  << std::fixed << std::setprecision(1) << (totalConvertingTime / totalTime * 100) << "%)"
                   << std::endl;
         std::cout << "QP求解总时间: " << totalQpSolveTime << " ms ("
                   << std::fixed << std::setprecision(1) << (totalQpSolveTime / totalTime * 100) << "%)" << std::endl;
@@ -367,6 +381,14 @@ void SQPOptimizationSolver::setVerbose(bool verbose) {
     verbose_ = verbose;
     // 同时设置QP求解器的详细程度
     qpSolver_.setVerbosity(verbose);
+}
+
+/**
+* @brief 设置计算的backend
+* @param verbose 是否输出详细信息
+*/
+void SQPOptimizationSolver::setBackend(bool useCUDA) {
+    useCUDA_ = useCUDA;
 }
 
 /**

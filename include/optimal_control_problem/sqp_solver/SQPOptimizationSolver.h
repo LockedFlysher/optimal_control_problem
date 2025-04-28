@@ -111,4 +111,10 @@ private:
      * @return 转换后的CasADi DM
      */
     casadi::DM tensorToDM(const torch::Tensor &tensor);
+    /**
+     * @brief 设置为使用CUDA与否
+     * @param tensor torch::Tensor
+     * @return 转换后的CasADi DM
+     */
+    void setBackend(bool useCUDA);
 };
