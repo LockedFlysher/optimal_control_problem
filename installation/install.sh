@@ -29,7 +29,7 @@ install_casadi() {
         echo "CasADi directory already exists. Using existing directory..."
     else
         echo "Cloning CasADi repository..."
-        git clone https://github.com/casadi/casadi.git -b main casadi
+        git clone https://github.com/casadi/casadi.git -b nightly-release-3.6.5 casadi
     fi
 
     cd casadi

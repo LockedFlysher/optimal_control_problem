@@ -169,8 +169,8 @@ endforeach ()
 ######################################## 通用安装配置 ######################################
 # 安装头文件 / Install header files
 install(DIRECTORY
-        include/
-        DESTINATION include)
+        cusadi/
+        DESTINATION share/${PROJECT_NAME}/)
 
 # 获取当前目录下的所有文件夹
 file(GLOB SUBDIRS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *)

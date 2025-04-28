@@ -424,13 +424,13 @@ void OptimalControlProblem::genSolver() {
                     if (solverSettings.verbose) {
                         std::cout << "LocalSystemFunction saved successfully to: " << target_file << std::endl;
                     }
-                    const std::string cusadi_function_path = packagePath_ + "/scripts/cusadi/src/casadi_functions/localSystemFunction.casadi";
+                    const std::string cusadi_function_path = packagePath_ + "/cusadi/src/casadi_functions/localSystemFunction.casadi";
                     std::filesystem::copy_file(target_file, cusadi_function_path,
                            std::filesystem::copy_options::overwrite_existing);
                     if (!std::filesystem::exists(cusadi_function_path)) {
                         throw std::runtime_error("Failed to cp LocalSystemFunction from"+target_file.string()+"to : " + cusadi_function_path);
                     }
-                    const std::string run_codegen_path = packagePath_ + "/scripts/cusadi/run_codegen.py";
+                    const std::string run_codegen_path = packagePath_ + "/cusadi/run_codegen.py";
                     const std::string command = "python3 " + run_codegen_path + " --fn=localSystemFunction";
                     int result = std::system(command.c_str());
                     // 检查命令执行结果
@@ -439,7 +439,7 @@ void OptimalControlProblem::genSolver() {
                         throw std::runtime_error("Failed to run script(run_codegen.py),exit " + result);
                     }
                     if (solverSettings.verbose) {
-                        std::cout << "LocalSystemFunction successfully gen cuda code: " << packagePath_+"/scripts/cusadi/build/libLocalSystemFunction.so" << std::endl;
+                        std::cout << "LocalSystemFunction successfully gen cuda code: " << packagePath_+"/cusadi/build/libLocalSystemFunction.so" << std::endl;
                     }
                     break;
                 }

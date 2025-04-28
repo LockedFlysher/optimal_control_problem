@@ -14,7 +14,7 @@ CusadiFunction::CusadiFunction(const casadi::Function &fn_casadi, int num_instan
         : fn_(fn_casadi), num_instances_(num_instances) {
     // 加载CUDA共享库，直接加载的就是这么一个函数，不用做任何的路径修改，先暴力地这么做
     std::string path = ament_index_cpp::get_package_share_directory("optimal_control_problem") +
-                       "/scripts/cusadi/build/liblocalSystemFunction.so";
+                       "/cusadi/build/liblocalSystemFunction.so";
     lib_handle_ = dlopen(path.c_str(), RTLD_LAZY);
     if (!lib_handle_) {
         std::cerr << "dlopen failed: " << dlerror();
