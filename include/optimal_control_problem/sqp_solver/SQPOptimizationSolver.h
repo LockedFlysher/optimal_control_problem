@@ -62,6 +62,7 @@ private:
     int stepNum_;         // 最大迭代次数
     double alpha_;        // 步长因子
     bool verbose_;        // 是否输出详细信息
+    bool useCUDA_{false}; // 是否使用CUDA的CuCaQP
 
     // 优化结果
     casadi::DMDict result_;

@@ -174,5 +174,9 @@ torch::Tensor CusadiFunction::getDenseOutput(int out_idx) {
     return torch::sparse_coo_tensor(
             torch::stack({env_idx, row_idx, col_idx}), vals,
             {num_instances_, fn_.size1_out(out_idx), fn_.size2_out(out_idx)}
-    ).to_dense();
+    );
+//    return torch::sparse_coo_tensor(
+//            torch::stack({env_idx, row_idx, col_idx}), vals,
+//            {num_instances_, fn_.size1_out(out_idx), fn_.size2_out(out_idx)}
+//    ).to_dense();
 }

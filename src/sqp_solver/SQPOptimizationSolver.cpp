@@ -137,15 +137,11 @@ std::vector<torch::Tensor> SQPOptimizationSolver::getLocalSystemTensor(
     for (const auto &pair: arg) {
         casadiArg[pair.first] = tensorToDM(pair.second);
     }
-
+std::vector<torch::Tensor> localSystemTensor;
     // 使用CasADi版本获取局部系统
-    DMVector localSystem = getLocalSystem(casadiArg);
+//    DMVector localSystem = getLocalSystem(casadiArg);
+//    TODO : inference
 
-    // 将结果转换为torch::Tensor向量
-    std::vector<torch::Tensor> localSystemTensor;
-    for (const auto &dm: localSystem) {
-        localSystemTensor.push_back(dmToTensor(dm));
-    }
 
     return localSystemTensor;
 }

@@ -140,6 +140,8 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
                         res = libIPOPTSolver_(arg);
                         break;
                     case SolverSettings::SolverType::CUDA_SQP:
+//                        todo 这里设置好SQP求解器加载.so的方法，添加一个 setBackend() 的方法
+//                        OSQPSolverPtr_->
                         res = OSQPSolverPtr_->getOptimalSolution(arg);
                         break;
                 }
