@@ -10,11 +10,11 @@
  * @param fn_casadi CasADi函数对象
  * @param num_instances 并行实例数量
  */
-CusadiFunction::CusadiFunction(const casadi::Function& fn_casadi, int num_instances)
+CusadiFunction::CusadiFunction(const casadi::Function &fn_casadi, int num_instances)
         : fn_(fn_casadi), num_instances_(num_instances) {
     // 加载CUDA共享库，直接加载的就是这么一个函数，不用做任何的路径修改，先暴力地这么做
-    std::string path ="/home/lock/project/NEBULA_ws/src/optimal_control_problem/code_gen/liblocalSystemFunction.so";
-//            ament_index_cpp::get_package_share_directory("optimal_control_problem")+"/script/cusadi/build/liblocalSystemFunction.so";
+    std::string path = ament_index_cpp::get_package_share_directory("optimal_control_problem") +
+                       "/scripts/cusadi/build/liblocalSystemFunction.so";
     lib_handle_ = dlopen(path.c_str(), RTLD_LAZY);
     if (!lib_handle_) {
         std::cerr << "dlopen failed: " << dlerror();
@@ -74,7 +74,7 @@ void CusadiFunction::setup() {
  * @brief 清除输出和工作空间张量
  */
 void CusadiFunction::clearTensors() {
-    for (auto& t : output_tensors_) {
+    for (auto &t: output_tensors_) {
         t.zero_();
     }
     work_tensor_.zero_();
@@ -84,7 +84,7 @@ void CusadiFunction::clearTensors() {
  * @brief 准备输入张量
  * @param inputs 输入张量列表
  */
-void CusadiFunction::prepareInputTensors(const std::vector<torch::Tensor>& inputs) {
+void CusadiFunction::prepareInputTensors(const std::vector<torch::Tensor> &inputs) {
     const size_t num_inputs = std::min(inputs.size(), input_tensors_.size());
     for (size_t i = 0; i < num_inputs; ++i) {
         input_tensors_[i] = inputs[i].contiguous().to(torch::kCUDA);
@@ -95,7 +95,7 @@ void CusadiFunction::prepareInputTensors(const std::vector<torch::Tensor>& input
  * @brief 执行CUDA计算
  * @param inputs 输入张量列表
  */
-void CusadiFunction::evaluate(const std::vector<torch::Tensor>& inputs) {
+void CusadiFunction::evaluate(const std::vector<torch::Tensor> &inputs) {
     // 清除之前的计算结果
     clearTensors();
 
@@ -124,9 +124,9 @@ void CusadiFunction::evaluate(const std::vector<torch::Tensor>& inputs) {
     output_ptrs_tensor_.copy_(h_output_tensor);
 
     // 获取设备指针
-    int64_t* d_input_ptrs = input_ptrs_tensor_.data_ptr<int64_t>();
-    double* d_work = work_tensor_.data_ptr<double>();
-    int64_t* d_output_ptrs = output_ptrs_tensor_.data_ptr<int64_t>();
+    int64_t *d_input_ptrs = input_ptrs_tensor_.data_ptr<int64_t>();
+    double *d_work = work_tensor_.data_ptr<double>();
+    int64_t *d_output_ptrs = output_ptrs_tensor_.data_ptr<int64_t>();
 
     // 调用CUDA函数
     float execution_time = eval_fn_(d_input_ptrs, d_work, d_output_ptrs, num_instances_);
