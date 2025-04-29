@@ -316,6 +316,8 @@ public:
     DM getSolutionAsDM();
     torch::Tensor getSolutionAsTensor();
 
+    bool verbose_{false};
+
 private:
     // 缓存的数据结构，避免重复分配内存
     Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> upperBound;

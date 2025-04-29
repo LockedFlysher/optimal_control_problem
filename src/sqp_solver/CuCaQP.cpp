@@ -51,15 +51,16 @@ bool CuCaQP::setDimension(int numOfVariables, int numOfConstraints) {
     solver_.data()->setNumberOfConstraints(numOfConstraints_);
     return true;
 }
-
 bool CuCaQP::setHessianMatrix(const torch::Tensor &hessian) {
+    // 只在verbose_模式下打印接收到的Hessian矩阵维度
+    if (verbose_) {
+        std::cout << "接收到Hessian矩阵: 维度=[" << hessian.size(0) << "x" << hessian.size(1)
+                  << "], 期望维度=[" << numOfVariables_ << "x" << numOfVariables_ << "]" << std::endl;
+    }
     // 先清理之前的Hessian矩阵
     solver_.data()->clearHessianMatrix();
     // 检查维度
     if (hessian.size(0) != numOfVariables_ || hessian.size(1) != numOfVariables_) {
-        // 打印接收到的Hessian矩阵维度
-        std::cout << "接收到Hessian矩阵: 维度=[" << hessian.size(0) << "x" << hessian.size(1)
-                  << "], 期望维度=[" << numOfVariables_ << "x" << numOfVariables_ << "]" << std::endl;
         std::cerr << "Error: Hessian matrix dimensions mismatch. Expected "
                   << numOfVariables_ << "x" << numOfVariables_ << std::endl;
         return false;
@@ -74,12 +75,13 @@ bool CuCaQP::setHessianMatrix(const torch::Tensor &hessian) {
 }
 
 bool CuCaQP::setGradient(const torch::Tensor &q) {
-
-    // 检查维度
-    if (q.numel() != numOfVariables_) {
-        // 打印接收到的梯度向量维度
+    // 只在verbose_模式下打印接收到的梯度向量维度
+    if (verbose_) {
         std::cout << "接收到梯度向量: 元素数=" << q.numel()
                   << ", 期望元素数=" << numOfVariables_ << std::endl;
+    }
+    // 检查维度
+    if (q.numel() != numOfVariables_) {
         std::cerr << "Error: Gradient vector size mismatch. Expected " << numOfVariables_ << std::endl;
         return false;
     }
@@ -95,11 +97,14 @@ bool CuCaQP::setGradient(const torch::Tensor &q) {
 bool CuCaQP::setLinearConstraintsMatrix(const torch::Tensor &A) {
     // 先清理之前的线性约束矩阵
     solver_.data()->clearLinearConstraintsMatrix();
-    // 检查维度
-    if (A.size(0) != numOfConstraints_ || A.size(1) != numOfVariables_) {
-        // 打印接收到的约束矩阵维度
+
+    // 只在verbose_模式下打印接收到的约束矩阵维度
+    if (verbose_) {
         std::cout << "接收到约束矩阵: 维度=[" << A.size(0) << "x" << A.size(1)
                   << "], 期望维度=[" << numOfConstraints_ << "x" << numOfVariables_ << "]" << std::endl;
+    }
+
+    if (A.size(0) != numOfConstraints_ || A.size(1) != numOfVariables_) {
         std::cerr << "Error: Constraint matrix dimensions mismatch. Expected "
                   << numOfConstraints_ << "x" << numOfVariables_ << std::endl;
         return false;
@@ -114,12 +119,13 @@ bool CuCaQP::setLinearConstraintsMatrix(const torch::Tensor &A) {
 }
 
 bool CuCaQP::setLowerBound(const torch::Tensor &l) {
-    // 打印接收到的下界向量维度
-
-    // 检查维度
-    if (l.numel() != numOfConstraints_) {
+    // 只在verbose_模式下打印接收到的下界向量维度
+    if (verbose_) {
         std::cout << "接收到下界向量: 元素数=" << l.numel()
                   << ", 期望元素数=" << numOfConstraints_ << std::endl;
+    }
+    // 检查维度
+    if (l.numel() != numOfConstraints_) {
         std::cerr << "Error: Lower bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
         return false;
     }
@@ -133,10 +139,13 @@ bool CuCaQP::setLowerBound(const torch::Tensor &l) {
 }
 
 bool CuCaQP::setUpperBound(const torch::Tensor &u) {
-    // 检查维度
-    if (u.numel() != numOfConstraints_) {
+    // 只在verbose_模式下打印接收到的上界向量维度
+    if (verbose_) {
         std::cout << "接收到上界向量: 元素数=" << u.numel()
                   << ", 期望元素数=" << numOfConstraints_ << std::endl;
+    }
+    // 检查维度
+    if (u.numel() != numOfConstraints_) {
         std::cerr << "Error: Upper bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
         return false;
     }
@@ -148,6 +157,7 @@ bool CuCaQP::setUpperBound(const torch::Tensor &u) {
     bool result = solver_.data()->setUpperBound(upperBound);
     return result;
 }
+
 
 
 void CuCaQP::setVerbosity(bool verbosity) {
@@ -242,46 +252,67 @@ void CuCaQP::printSolverData() {
     // 直接访问OSQP内部数据
     const auto *osqpData = solver_.data()->getData();
 
-    // 打印梯度向量q
-    std::cout << "内部存储的梯度向量q:\n";
-    for (int i = 0; i < osqpData->n; i++) {
-        std::cout << osqpData->q[i] << " ";
-    }
+    // 打印问题维度信息
+    std::cout << "问题维度: 变量数量 n = " << osqpData->n << ", 约束数量 m = " << osqpData->m << std::endl;
+
+    // 打印梯度向量q的前几个元素
+    std::cout << "梯度向量q (维度: " << osqpData->n << "):\n";
+//    const int maxPrintQ = std::min(5, osqpData->n); // 最多打印5个元素
+//    for (int i = 0; i < maxPrintQ; i++) {
+//        std::cout << osqpData->q[i] << " ";
+//    }
+//    if (osqpData->n > maxPrintQ) std::cout << "...";
     std::cout << std::endl;
 
-    // 打印下界l
-    std::cout << "内部存储的下界l:\n";
-    for (int i = 0; i < osqpData->m; i++) {
+    // 打印下界l的前几个元素
+    std::cout << "下界l (维度: " << osqpData->m << "):\n";
+    const int maxPrintL = std::min(5, osqpData->m); // 最多打印5个元素
+    for (int i = 0; i < maxPrintL; i++) {
         std::cout << osqpData->l[i] << " ";
     }
+    if (osqpData->m > maxPrintL) std::cout << "...";
     std::cout << std::endl;
 
-    // 打印上界u
-    std::cout << "内部存储的上界u:\n";
-    for (int i = 0; i < osqpData->m; i++) {
+    // 打印上界u的前几个元素
+    std::cout << "上界u (维度: " << osqpData->m << "):\n";
+    const int maxPrintU = std::min(5, osqpData->m); // 最多打印5个元素
+    for (int i = 0; i < maxPrintU; i++) {
         std::cout << osqpData->u[i] << " ";
     }
+    if (osqpData->m > maxPrintU) std::cout << "...";
     std::cout << std::endl;
 
-    // 注意：P和A是CSC格式，直接打印比较复杂
-    std::cout << "内部存储的Hessian矩阵P (非零元素):\n";
-    for (int j = 0; j < osqpData->n; j++) {
-        for (int p = osqpData->P->p[j]; p < osqpData->P->p[j + 1]; p++) {
+    // 打印P矩阵信息及有限个非零元素
+    int nnzP = osqpData->P->p[osqpData->n]; // P中非零元素的数量
+    std::cout << "Hessian矩阵P: " << osqpData->n << "x" << osqpData->n << ", 非零元素: " << nnzP << std::endl;
+    const int maxPrintP = std::min(5, nnzP); // 最多打印5个非零元素
+    std::cout << "P的前" << maxPrintP << "个非零元素:\n";
+    int countP = 0;
+    for (int j = 0; j < osqpData->n && countP < maxPrintP; j++) {
+        for (int p = osqpData->P->p[j]; p < osqpData->P->p[j + 1] && countP < maxPrintP; p++) {
             int i = osqpData->P->i[p];
             c_float val = osqpData->P->x[p];
             std::cout << "(" << i << "," << j << "): " << val << std::endl;
+            countP++;
         }
     }
 
-    std::cout << "内部存储的约束矩阵A (非零元素):\n";
-    for (int j = 0; j < osqpData->n; j++) {
-        for (int p = osqpData->A->p[j]; p < osqpData->A->p[j + 1]; p++) {
+    // 打印A矩阵信息及有限个非零元素
+    int nnzA = osqpData->A->p[osqpData->n]; // A中非零元素的数量
+    std::cout << "约束矩阵A: " << osqpData->m << "x" << osqpData->n << ", 非零元素: " << nnzA << std::endl;
+    const int maxPrintA = std::min(5, nnzA); // 最多打印5个非零元素
+    std::cout << "A的前" << maxPrintA << "个非零元素:\n";
+    int countA = 0;
+    for (int j = 0; j < osqpData->n && countA < maxPrintA; j++) {
+        for (int p = osqpData->A->p[j]; p < osqpData->A->p[j + 1] && countA < maxPrintA; p++) {
             int i = osqpData->A->i[p];
             c_float val = osqpData->A->x[p];
             std::cout << "(" << i << "," << j << "): " << val << std::endl;
+            countA++;
         }
     }
 }
+
 
 void CuCaQP::setSystem(const std::vector<torch::Tensor> &torchSystem, uint env) {
     // 检查输入向量大小
