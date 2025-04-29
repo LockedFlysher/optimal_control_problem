@@ -2,6 +2,7 @@
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <yaml-cpp/yaml.h>
+#include <memory>
 #include <chrono> // 添加计时功能
 #include "optimal_control_problem/sqp_solver/AutoDifferentiator.h"
 #include "optimal_control_problem/cusadi_function/CusadiFunction.h"
@@ -63,6 +64,13 @@ private:
     double alpha_;        // 步长因子
     bool verbose_;        // 是否输出详细信息
     bool useCUDA_{false}; // 是否使用CUDA的CuCaQP
+
+    //cusadi
+    std::string functionFilePath_; // 存储localsystemfunction的路径
+    int N_ENVS;
+    casadi::Function fn;
+    std::unique_ptr<CusadiFunction> solver_; // 智能指针成员
+
 
     // 优化结果
     casadi::DMDict result_;
