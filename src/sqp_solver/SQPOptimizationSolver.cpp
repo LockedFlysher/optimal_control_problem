@@ -175,37 +175,33 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
         double localSystemTime =
                 duration_cast<microseconds>(localSystemEndTime - localSystemStartTime).count() / 1000.0;
         totalLocalSystemTime += localSystemTime;
-
         if (verbose_) {
             std::cout << "  局部系统计算时间: " << localSystemTime << " ms" << std::endl;
         }
 
-        // 设置并求解QP问题
-        auto qpStartTime = high_resolution_clock::now();
-
-        // 计算局部系统时间
+        // 计算数据类型转换时间
         auto convertingStartTime = high_resolution_clock::now();
         qpSolver_.setSystem(localSystem);
-        auto convertingEndTIme = high_resolution_clock::now();
-        double convertingTime = duration_cast<microseconds>(convertingEndTIme - convertingStartTime).count() / 1000.0;
+        auto convertingEndTime = high_resolution_clock::now();
+        double convertingTime = duration_cast<microseconds>(convertingEndTime - convertingStartTime).count() / 1000.0;
         totalConvertingTime += convertingTime;
         if (verbose_) {
             std::cout << "  系统数据类型转换计算时间: " << convertingTime << " ms" << std::endl;
         }
+
+        // 设置并求解QP问题
+        auto qpStartTime = high_resolution_clock::now();
         qpSolver_.initSolver();
         qpSolver_.solve();
         auto qpEndTime = high_resolution_clock::now();
         double qpSolveTime = duration_cast<microseconds>(qpEndTime - qpStartTime).count() / 1000.0;
         totalQpSolveTime += qpSolveTime;
-
         if (verbose_) {
             std::cout << "  QP求解时间: " << qpSolveTime << " ms" << std::endl;
         }
-
         // 获取解并更新
         DM solution = qpSolver_.getSolutionAsDM();
         DM oldRes = result_.at("x");
-
         // 根据是否存在参考变量p来更新结果
         if (arg.find("p") == arg.end() || arg.at("p").size1() == 0) {
             result_.at("x") += alpha_ * solution;
