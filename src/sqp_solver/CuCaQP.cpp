@@ -55,13 +55,11 @@ bool CuCaQP::setDimension(int numOfVariables, int numOfConstraints) {
 bool CuCaQP::setHessianMatrix(const torch::Tensor &hessian) {
     // 先清理之前的Hessian矩阵
     solver_.data()->clearHessianMatrix();
-
-    // 打印接收到的Hessian矩阵维度
-    std::cout << "接收到Hessian矩阵: 维度=[" << hessian.size(0) << "x" << hessian.size(1)
-              << "], 期望维度=[" << numOfVariables_ << "x" << numOfVariables_ << "]" << std::endl;
-
     // 检查维度
     if (hessian.size(0) != numOfVariables_ || hessian.size(1) != numOfVariables_) {
+        // 打印接收到的Hessian矩阵维度
+        std::cout << "接收到Hessian矩阵: 维度=[" << hessian.size(0) << "x" << hessian.size(1)
+                  << "], 期望维度=[" << numOfVariables_ << "x" << numOfVariables_ << "]" << std::endl;
         std::cerr << "Error: Hessian matrix dimensions mismatch. Expected "
                   << numOfVariables_ << "x" << numOfVariables_ << std::endl;
         return false;
@@ -76,12 +74,12 @@ bool CuCaQP::setHessianMatrix(const torch::Tensor &hessian) {
 }
 
 bool CuCaQP::setGradient(const torch::Tensor &q) {
-    // 打印接收到的梯度向量维度
-    std::cout << "接收到梯度向量: 元素数=" << q.numel()
-              << ", 期望元素数=" << numOfVariables_ << std::endl;
 
     // 检查维度
     if (q.numel() != numOfVariables_) {
+        // 打印接收到的梯度向量维度
+        std::cout << "接收到梯度向量: 元素数=" << q.numel()
+                  << ", 期望元素数=" << numOfVariables_ << std::endl;
         std::cerr << "Error: Gradient vector size mismatch. Expected " << numOfVariables_ << std::endl;
         return false;
     }
@@ -97,13 +95,11 @@ bool CuCaQP::setGradient(const torch::Tensor &q) {
 bool CuCaQP::setLinearConstraintsMatrix(const torch::Tensor &A) {
     // 先清理之前的线性约束矩阵
     solver_.data()->clearLinearConstraintsMatrix();
-
-    // 打印接收到的约束矩阵维度
-    std::cout << "接收到约束矩阵: 维度=[" << A.size(0) << "x" << A.size(1)
-              << "], 期望维度=[" << numOfConstraints_ << "x" << numOfVariables_ << "]" << std::endl;
-
     // 检查维度
     if (A.size(0) != numOfConstraints_ || A.size(1) != numOfVariables_) {
+        // 打印接收到的约束矩阵维度
+        std::cout << "接收到约束矩阵: 维度=[" << A.size(0) << "x" << A.size(1)
+                  << "], 期望维度=[" << numOfConstraints_ << "x" << numOfVariables_ << "]" << std::endl;
         std::cerr << "Error: Constraint matrix dimensions mismatch. Expected "
                   << numOfConstraints_ << "x" << numOfVariables_ << std::endl;
         return false;
@@ -119,11 +115,11 @@ bool CuCaQP::setLinearConstraintsMatrix(const torch::Tensor &A) {
 
 bool CuCaQP::setLowerBound(const torch::Tensor &l) {
     // 打印接收到的下界向量维度
-    std::cout << "接收到下界向量: 元素数=" << l.numel()
-              << ", 期望元素数=" << numOfConstraints_ << std::endl;
 
     // 检查维度
     if (l.numel() != numOfConstraints_) {
+        std::cout << "接收到下界向量: 元素数=" << l.numel()
+                  << ", 期望元素数=" << numOfConstraints_ << std::endl;
         std::cerr << "Error: Lower bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
         return false;
     }
@@ -137,12 +133,10 @@ bool CuCaQP::setLowerBound(const torch::Tensor &l) {
 }
 
 bool CuCaQP::setUpperBound(const torch::Tensor &u) {
-    // 打印接收到的上界向量维度
-    std::cout << "接收到上界向量: 元素数=" << u.numel()
-              << ", 期望元素数=" << numOfConstraints_ << std::endl;
-
     // 检查维度
     if (u.numel() != numOfConstraints_) {
+        std::cout << "接收到上界向量: 元素数=" << u.numel()
+                  << ", 期望元素数=" << numOfConstraints_ << std::endl;
         std::cerr << "Error: Upper bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
         return false;
     }

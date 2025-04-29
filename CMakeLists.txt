@@ -15,7 +15,7 @@ link_directories(/usr/local/cuda/lib64)
 
 ######################################## 基础构建设置 ###########################################
 # 设置构建类型为RelWithDebInfo（带调试信息的发布版本）
-set(CMAKE_BUILD_TYPE RelWithDebInfo)
+set(CMAKE_BUILD_TYPE Debug)
 # 导出编译命令，用于IDE和工具的代码补全
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -171,9 +171,6 @@ endforeach ()
 install(DIRECTORY
         include/
         DESTINATION include)
-install(DIRECTORY
-        cusadi/
-        DESTINATION share/${PROJECT_NAME}/)
 
 # 获取当前目录下的所有文件夹
 file(GLOB SUBDIRS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *)
@@ -182,11 +179,11 @@ file(GLOB SUBDIRS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} *)
 foreach (SUBDIR ${SUBDIRS})
     if (IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${SUBDIR})
         # 排除 src、include、build 等目录
-        if (NOT ${SUBDIR} STREQUAL "src" AND
-                NOT ${SUBDIR} STREQUAL "build" AND
-                NOT ${SUBDIR} STREQUAL ".git" AND
-                NOT ${SUBDIR} STREQUAL "installation" AND
-                NOT ${SUBDIR} STREQUAL "install")
+        if (
+                NOT ${SUBDIR} STREQUAL "src" AND
+                NOT ${SUBDIR} STREQUAL "log" AND
+                NOT ${SUBDIR} STREQUAL "install" AND
+                NOT ${SUBDIR} STREQUAL "installation")
             install(DIRECTORY
                     ${SUBDIR}
                     DESTINATION share/${PROJECT_NAME}/
@@ -194,6 +191,14 @@ foreach (SUBDIR ${SUBDIRS})
         endif ()
     endif ()
 endforeach ()
+
+# 在 foreach 循环之后添加
+if (IS_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/cusadi)
+    install(DIRECTORY
+            cusadi
+            DESTINATION share/${PROJECT_NAME}/
+    )
+endif()
 ######################################## ROS2包配置 ########################################
 # 导出包依赖
 ament_export_dependencies(${parent_packages})

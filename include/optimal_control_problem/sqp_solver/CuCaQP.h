@@ -187,7 +187,6 @@ inline Eigen::Matrix<T_Out, Eigen::Dynamic, Eigen::Dynamic> torchTensorToEigenDe
 
     return eigenMatrix;
 }
-
 /**
  * 将torch::Tensor向量转换为Eigen密集向量
  * @param torchVector torch::Tensor向量
@@ -197,8 +196,13 @@ inline Eigen::Matrix<T_Out, Eigen::Dynamic, Eigen::Dynamic> torchTensorToEigenDe
  */
 template<typename T_Out = OSQPFloat>
 inline Eigen::Matrix<T_Out, Eigen::Dynamic, 1> torchTensorToEigenVector(const torch::Tensor &torchVector, int n = 0) {
-    // 确保输入是CPU张量
+    // 确保输入是CPU张量，并且是密集张量
     auto cpuTensor = torchVector.to(torch::kCPU);
+
+    // 如果是稀疏张量，直接转换为密集张量
+    if (cpuTensor.is_sparse()) {
+        cpuTensor = cpuTensor.to_dense();
+    }
 
     // 处理多维张量情况
     if (cpuTensor.dim() > 1) {
@@ -268,6 +272,7 @@ inline Eigen::Matrix<T_Out, Eigen::Dynamic, 1> torchTensorToEigenVector(const to
 }
 
 
+
 class CuCaQP {
 public:
     CuCaQP();
@@ -279,7 +284,7 @@ public:
 
     // 设置优化问题数据 - torch::Tensor版本
     // 设置系统 - torch::Tensor版本
-    void setSystem(const std::vector<torch::Tensor> &torchSystem,uint env=1);
+    void setSystem(const std::vector<torch::Tensor> &torchSystem,uint env=0);
 
     bool setHessianMatrix(const torch::Tensor &hessian);
     bool setGradient(const torch::Tensor &q);

@@ -141,20 +141,12 @@ std::vector<torch::Tensor> SQPOptimizationSolver::getLocalSystem(const DMDict &a
 
     std::vector<torch::Tensor> inputs = {p_tensor, x_tensor, l_tensor, u_tensor};
     solver_->evaluate(inputs);
-
     std::vector<torch::Tensor> outTensorVector;
     outTensorVector.push_back(solver_->getDenseOutput(0).cpu());
     outTensorVector.push_back(solver_->getDenseOutput(1).cpu());
     outTensorVector.push_back(solver_->getDenseOutput(2).cpu());
     outTensorVector.push_back(solver_->getDenseOutput(3).cpu());
     outTensorVector.push_back(solver_->getDenseOutput(4).cpu());
-
-    std::cout<<outTensorVector[0]<<std::endl;
-    std::cout<<outTensorVector[1]<<std::endl;
-    std::cout<<outTensorVector[2]<<std::endl;
-    std::cout<<outTensorVector[3]<<std::endl;
-    std::cout<<outTensorVector[4]<<std::endl;
-
     return outTensorVector;
 }
 
