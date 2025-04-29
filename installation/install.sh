@@ -53,7 +53,8 @@ install_libtorch() {
     print_separator
     echo -e "\033[34mStep 2: Installing libtorch...\033[0m"
 
-    LIBTORCH_ZIP="libtorch-cxx11-abi-shared-with-deps-2.7.0+cu126.zip"
+    LIBTORCH_ZIP="libtorch-cxx11-abi-shared-with-deps-2.7.0%2Bcu126.zip"
+    LIBTORCH_ZIP_plus="libtorch-cxx11-abi-shared-with-deps-2.7.0+cu126.zip"
 
     # Check if libtorch directory already exists
     if [ -d "libtorch" ]; then
@@ -68,7 +69,8 @@ install_libtorch() {
         fi
 
         echo "Extracting libtorch..."
-        unzip -q $LIBTORCH_ZIP
+        mv ./$LIBTORCH_ZIP_plus ./$LIBTORCH_ZIP
+        unzip -q $LIBTORCH_ZIP 
     fi
 
 
