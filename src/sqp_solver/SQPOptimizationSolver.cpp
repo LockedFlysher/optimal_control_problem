@@ -16,6 +16,14 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict &nlp, ::casadi::Di
     alpha_ = options.at("alpha").as_double();
     setVerbose(options.at("verbose"));
 
+    // cusadi相关参数
+    // 加载localsystemfunction的路径
+    functionFilePath_ = ament_index_cpp::get_package_share_directory("optimal_control_problem") + "/code_gen/localSystemFunction.casadi";
+    N_ENVS = 1;
+    fn = casadi::Function::load(functionFilePath_);
+    std::cout<<"Loaded CasADi function: "<<fn.name()<<"\n";
+    solver_ = std::make_unique<CusadiFunction>(fn, N_ENVS);
+
     // 必需参数检查
     if (nlp.find("f") == nlp.end()) {
         throw std::invalid_argument("目标函数'f'未定义");
@@ -111,18 +119,47 @@ DMVector SQPOptimizationSolver::getLocalSystem(const DMDict &arg) {
     DM ubg = arg.at("ubg");
 
     // 处理参考变量p
-    DM p;
-    if (arg.find("p") != arg.end()) {
-        p = arg.at("p");
-    } else {
-        p = DM::zeros(0, 1);  // 创建空矩阵作为默认值
-    }
+    // DM p;
+    // if (arg.find("p") != arg.end()) {
+    //     p = arg.at("p");
+    // } else {
+    //     p = DM::zeros(0, 1);  // 创建空矩阵作为默认值
+    // }
+    DM p_dm = (arg.find("p") != arg.end()) ? arg.at("p") : DM::zeros(0, 1);
+    DM l_dm = DM::vertcat({p_dm, lbx, lbg});
+    DM u_dm = DM::vertcat({p_dm, ubx, ubg});
+    // DM x_dm = result_.at("x");
+    DM x_dm = arg.at("x");
 
-    // 调用局部系统函数
-    DMVector localSystem = localSystemFunction_(
-            DMVector{p, result_.at("x"), DM::vertcat({p, lbx, lbg}), DM::vertcat({p, ubx, ubg})});
+    // 2. 将DM转换为Tensor，并确保数据类型为kFloat64
+    auto p_tensor = dmToTensor(p_dm).to(torch::kFloat64).to(torch::kCUDA);
+    auto x_tensor = dmToTensor(x_dm).to(torch::kFloat64).to(torch::kCUDA);
+    auto l_tensor = dmToTensor(l_dm).to(torch::kFloat64).to(torch::kCUDA);
+    auto u_tensor = dmToTensor(u_dm).to(torch::kFloat64).to(torch::kCUDA);
 
-    return localSystem;
+    // 确保输入Tensor形状正确（二维列向量）
+    p_tensor = p_tensor.view({p_dm.size1(), 1});
+    x_tensor = x_tensor.view({x_dm.size1(), 1});
+    l_tensor = l_tensor.view({l_dm.size1(), 1});
+    u_tensor = u_tensor.view({u_dm.size1(), 1});
+
+    std::vector<torch::Tensor> inputs = {p_tensor, x_tensor, l_tensor, u_tensor};
+    solver_->evaluate(inputs);
+
+    // 获取输出并转换回DM
+    // DMVector output;
+    // for (int i = 0; i < localSystemFunction_.n_out(); ++i) {
+    //     torch::Tensor out_tensor = solver_->getDenseOutput(i).cpu(); // 移至CPU
+    //     output.push_back(tensorToDM(out_tensor));
+    // }
+    torch::Tensor out_tensor = solver_->getDenseOutput().cpu(); // 移至CPU
+
+    return out_tensor;
+    // // 调用局部系统函数
+    // DMVector localSystem = localSystemFunction_(
+    //         DMVector{p, result_.at("x"), DM::vertcat({p, lbx, lbg}), DM::vertcat({p, ubx, ubg})});
+
+    // return localSystem;
 }
 
 /**
