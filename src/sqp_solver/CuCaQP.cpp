@@ -56,6 +56,10 @@ bool CuCaQP::setHessianMatrix(const torch::Tensor &hessian) {
     // 先清理之前的Hessian矩阵
     solver_.data()->clearHessianMatrix();
 
+    // 打印接收到的Hessian矩阵维度
+    std::cout << "接收到Hessian矩阵: 维度=[" << hessian.size(0) << "x" << hessian.size(1)
+              << "], 期望维度=[" << numOfVariables_ << "x" << numOfVariables_ << "]" << std::endl;
+
     // 检查维度
     if (hessian.size(0) != numOfVariables_ || hessian.size(1) != numOfVariables_) {
         std::cerr << "Error: Hessian matrix dimensions mismatch. Expected "
@@ -72,6 +76,10 @@ bool CuCaQP::setHessianMatrix(const torch::Tensor &hessian) {
 }
 
 bool CuCaQP::setGradient(const torch::Tensor &q) {
+    // 打印接收到的梯度向量维度
+    std::cout << "接收到梯度向量: 元素数=" << q.numel()
+              << ", 期望元素数=" << numOfVariables_ << std::endl;
+
     // 检查维度
     if (q.numel() != numOfVariables_) {
         std::cerr << "Error: Gradient vector size mismatch. Expected " << numOfVariables_ << std::endl;
@@ -90,6 +98,10 @@ bool CuCaQP::setLinearConstraintsMatrix(const torch::Tensor &A) {
     // 先清理之前的线性约束矩阵
     solver_.data()->clearLinearConstraintsMatrix();
 
+    // 打印接收到的约束矩阵维度
+    std::cout << "接收到约束矩阵: 维度=[" << A.size(0) << "x" << A.size(1)
+              << "], 期望维度=[" << numOfConstraints_ << "x" << numOfVariables_ << "]" << std::endl;
+
     // 检查维度
     if (A.size(0) != numOfConstraints_ || A.size(1) != numOfVariables_) {
         std::cerr << "Error: Constraint matrix dimensions mismatch. Expected "
@@ -106,6 +118,10 @@ bool CuCaQP::setLinearConstraintsMatrix(const torch::Tensor &A) {
 }
 
 bool CuCaQP::setLowerBound(const torch::Tensor &l) {
+    // 打印接收到的下界向量维度
+    std::cout << "接收到下界向量: 元素数=" << l.numel()
+              << ", 期望元素数=" << numOfConstraints_ << std::endl;
+
     // 检查维度
     if (l.numel() != numOfConstraints_) {
         std::cerr << "Error: Lower bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
@@ -121,6 +137,10 @@ bool CuCaQP::setLowerBound(const torch::Tensor &l) {
 }
 
 bool CuCaQP::setUpperBound(const torch::Tensor &u) {
+    // 打印接收到的上界向量维度
+    std::cout << "接收到上界向量: 元素数=" << u.numel()
+              << ", 期望元素数=" << numOfConstraints_ << std::endl;
+
     // 检查维度
     if (u.numel() != numOfConstraints_) {
         std::cerr << "Error: Upper bound vector size mismatch. Expected " << numOfConstraints_ << std::endl;
@@ -134,6 +154,7 @@ bool CuCaQP::setUpperBound(const torch::Tensor &u) {
     bool result = solver_.data()->setUpperBound(upperBound);
     return result;
 }
+
 
 void CuCaQP::setVerbosity(bool verbosity) {
     solver_.settings()->setVerbosity(verbosity);
@@ -192,7 +213,7 @@ Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> CuCaQP::getSolution() {
 
 casadi::DM CuCaQP::getSolutionAsDM() {
     // 获取解决方案
-    const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1>& solution_float = solver_.getSolution();
+    const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> &solution_float = solver_.getSolution();
 
     // 创建CasADi DM矩阵
     int rows = solution_float.rows();
@@ -208,14 +229,14 @@ casadi::DM CuCaQP::getSolutionAsDM() {
 
 torch::Tensor CuCaQP::getSolutionAsTensor() {
     // 获取解决方案
-    const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1>& solution_float = solver_.getSolution();
+    const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> &solution_float = solver_.getSolution();
     int rows = solution_float.rows();
 
     // 创建torch::Tensor，预分配内存
     torch::Tensor solution = torch::zeros({rows}, torch::kFloat32);
 
     // 获取数据指针并直接填充
-    float* data_ptr = solution.data_ptr<float>();
+    float *data_ptr = solution.data_ptr<float>();
     for (int i = 0; i < rows; ++i) {
         data_ptr[i] = static_cast<float>(solution_float(i));
     }
@@ -268,30 +289,19 @@ void CuCaQP::printSolverData() {
     }
 }
 
-void CuCaQP::setSystem(const std::vector<torch::Tensor> &torchSystem) {
+void CuCaQP::setSystem(const std::vector<torch::Tensor> &torchSystem, uint env) {
     // 检查输入向量大小
     if (torchSystem.size() != 5) {
         std::cerr << "Error: Expected 5 tensors in the system vector." << std::endl;
         return;
     }
-
-    // 如果求解器已初始化，先清理
-    if (isInitialized_) {
-        solver_.clearSolver();
-        isInitialized_ = false;
-    }
-
-    // 清理所有矩阵
-    solver_.data()->clearHessianMatrix();
-    solver_.data()->clearLinearConstraintsMatrix();
-
-    // 设置新的系统参数 - 使用模板函数以优化性能
-    setHessianMatrix(torchSystem[0]);
-    setGradient(torchSystem[1]);
-    setLinearConstraintsMatrix(torchSystem[2]);
-    setLowerBound(torchSystem[3]);
-    setUpperBound(torchSystem[4]);
+    setHessianMatrix(torchSystem[0][env]);
+    setGradient(torchSystem[1][env]);
+    setLinearConstraintsMatrix(torchSystem[2][env]);
+    setLowerBound(torchSystem[3][env]);
+    setUpperBound(torchSystem[4][env]);
 }
+
 
 //##################################### 暂时用不上的函数 ##################################################
 bool CuCaQP::setHessianMatrix(const Eigen::SparseMatrix<OSQPFloat> &P) {

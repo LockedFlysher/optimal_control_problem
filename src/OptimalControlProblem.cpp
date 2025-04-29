@@ -22,7 +22,7 @@ OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
         configNode_ = configNode;
 
         // 读取solver设置
-        const auto& solverSettings_node = configNode["solver_settings"];
+        const auto &solverSettings_node = configNode["solver_settings"];
         solverSettings.maxIter = solverSettings_node["max_iter"].as<int>();
         solverSettings.warmStart = solverSettings_node["warm_start"].as<bool>();
         solverSettings.SQP_settings.alpha = solverSettings_node["SQP_settings"]["alpha"].as<double>();
@@ -48,14 +48,14 @@ OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
             std::cout << "输出c代码且编译动态链接库：" << solverSettings.genCode << std::endl;
             std::cout << "使用动态链接库对求解器进行加载：" << solverSettings.loadLib << std::endl;
         }
-    } catch (const YAML::Exception& e) {
+    } catch (const YAML::Exception &e) {
         throw std::runtime_error("Error parsing YAML configuration: " + std::string(e.what()));
     }
 }
 
-bool OptimalControlProblem::validateConfig(const YAML::Node& config) {
+bool OptimalControlProblem::validateConfig(const YAML::Node &config) {
     if (!config["solver_settings"]) return false;
-    const auto& solver = config["solver_settings"];
+    const auto &solver = config["solver_settings"];
 
     return solver["max_iter"] && solver["warm_start"] &&
            solver["SQP_settings"] && solver["SQP_settings"]["alpha"] &&
@@ -63,7 +63,7 @@ bool OptimalControlProblem::validateConfig(const YAML::Node& config) {
            solver["gen_code"] && solver["load_lib"] && solver["solve_method"];
 }
 
-bool OptimalControlProblem::checkDirectoryPermissions(const std::string& path) {
+bool OptimalControlProblem::checkDirectoryPermissions(const std::string &path) {
     try {
         std::filesystem::path dir_path(path);
         if (!std::filesystem::exists(dir_path)) {
@@ -71,7 +71,7 @@ bool OptimalControlProblem::checkDirectoryPermissions(const std::string& path) {
         }
         // 检查写入权限
         return access(path.c_str(), W_OK) == 0;
-    } catch (const std::filesystem::filesystem_error& e) {
+    } catch (const std::filesystem::filesystem_error &e) {
         return false;
     }
 }
@@ -118,111 +118,108 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
     if (!solverInputCheck(arg)) {
         throw std::runtime_error("Solver input validation failed");
     }
-    try {
-        if (solverSettings.genCode || solverSettings.loadLib) {
-            if (firstTime_) {
-                switch (solverSettings.solverType) {
-                    case SolverSettings::SolverType::IPOPT:
-                        libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
-                                                           packagePath_ + "/code_gen/IPOPT_nlp_code.so");
-                        res = libIPOPTSolver_(arg);
-                        break;
-                    case SolverSettings::SolverType::SQP:
-                        libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
-                                                         packagePath_ + "/code_gen/SQP_nlp_code.so");
-                        res = libSQPSolver_(arg);
-                        break;
-                    case SolverSettings::SolverType::MIXED:
-                        libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
-                                                           packagePath_ + "/code_gen/IPOPT_nlp_code.so");
-                        libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
-                                                         packagePath_ + "/code_gen/SQP_nlp_code.so");
-                        res = libIPOPTSolver_(arg);
-                        break;
-                    case SolverSettings::SolverType::CUDA_SQP:
+    if (solverSettings.genCode || solverSettings.loadLib) {
+        if (firstTime_) {
+            switch (solverSettings.solverType) {
+                case SolverSettings::SolverType::IPOPT:
+                    libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
+                                                       packagePath_ + "/code_gen/IPOPT_nlp_code.so");
+                    res = libIPOPTSolver_(arg);
+                    break;
+                case SolverSettings::SolverType::SQP:
+                    libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
+                                                     packagePath_ + "/code_gen/SQP_nlp_code.so");
+                    res = libSQPSolver_(arg);
+                    break;
+                case SolverSettings::SolverType::MIXED:
+                    libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
+                                                       packagePath_ + "/code_gen/IPOPT_nlp_code.so");
+                    libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
+                                                     packagePath_ + "/code_gen/SQP_nlp_code.so");
+                    res = libIPOPTSolver_(arg);
+                    break;
+                case SolverSettings::SolverType::CUDA_SQP:
 //                        todo 这里设置好SQP求解器加载.so的方法，添加一个 setBackend() 的方法
 //                        OSQPSolverPtr_->
-                        res = OSQPSolverPtr_->getOptimalSolution(arg);
-                        break;
-                }
-                firstTime_ = false;
-            } else {
-                switch (solverSettings.solverType) {
-                    case SolverSettings::SolverType::IPOPT:
-                        res = libIPOPTSolver_(arg);
-                        break;
-                    case SolverSettings::SolverType::SQP:
-                        res = libSQPSolver_(arg);
-                        break;
-                    case SolverSettings::SolverType::MIXED:
-                        // 根据收敛性能决定使用哪个求解器
-                        if (optimalTrajectory_.is_empty() ||
-                            (res.count("f") > 0 && res.at("f").scalar() > 1e-6)) {
-                            res = libIPOPTSolver_(arg);
-                        } else {
-                            res = libSQPSolver_(arg);
-                        }
-                        break;
-                    case SolverSettings::SolverType::CUDA_SQP:
-                        res = OSQPSolverPtr_->getOptimalSolution(arg);
-                        break;
-                }
+                    res = OSQPSolverPtr_->getOptimalSolution(arg);
+                    break;
             }
+            firstTime_ = false;
         } else {
-            if (firstTime_) {
-                switch (solverSettings.solverType) {
-                    case SolverSettings::SolverType::IPOPT:
-                        res = IPOPTSolver_(arg);
-                        break;
-                    case SolverSettings::SolverType::SQP:
-                        res = SQPSolver_(arg);
-                        break;
-                    case SolverSettings::SolverType::MIXED:
-                        res = IPOPTSolver_(arg);
-                        break;
-                    case SolverSettings::SolverType::CUDA_SQP:
-                        res = OSQPSolverPtr_->getOptimalSolution(arg);
-                        break;
-                }
-                firstTime_ = false;
-            } else {
-                switch (solverSettings.solverType) {
-                    case SolverSettings::SolverType::IPOPT:
-                        res = IPOPTSolver_(arg);
-                        break;
-                    case SolverSettings::SolverType::SQP:
-                        res = SQPSolver_(arg);
-                        break;
-                    case SolverSettings::SolverType::MIXED:
-                        // 根据收敛性能决定使用哪个求解器
-                        if (optimalTrajectory_.is_empty() ||
-                            (res.count("f") > 0 && res.at("f").scalar() > 1e-6)) {
-                            res = IPOPTSolver_(arg);
-                        } else {
-                            res = SQPSolver_(arg);
-                        }
-                        break;
-                    case SolverSettings::SolverType::CUDA_SQP:
-                        res = OSQPSolverPtr_->getOptimalSolution(arg);
-                        break;
-                }
+            switch (solverSettings.solverType) {
+                case SolverSettings::SolverType::IPOPT:
+                    res = libIPOPTSolver_(arg);
+                    break;
+                case SolverSettings::SolverType::SQP:
+                    res = libSQPSolver_(arg);
+                    break;
+                case SolverSettings::SolverType::MIXED:
+                    // 根据收敛性能决定使用哪个求解器
+                    if (optimalTrajectory_.is_empty() ||
+                        (res.count("f") > 0 && res.at("f").scalar() > 1e-6)) {
+                        res = libIPOPTSolver_(arg);
+                    } else {
+                        res = libSQPSolver_(arg);
+                    }
+                    break;
+                case SolverSettings::SolverType::CUDA_SQP:
+                    res = OSQPSolverPtr_->getOptimalSolution(arg);
+                    break;
             }
         }
-
-        if (res.empty()) {
-            throw std::runtime_error("Solver returned empty result");
+    } else {
+        if (firstTime_) {
+            switch (solverSettings.solverType) {
+                case SolverSettings::SolverType::IPOPT:
+                    res = IPOPTSolver_(arg);
+                    break;
+                case SolverSettings::SolverType::SQP:
+                    res = SQPSolver_(arg);
+                    break;
+                case SolverSettings::SolverType::MIXED:
+                    res = IPOPTSolver_(arg);
+                    break;
+                case SolverSettings::SolverType::CUDA_SQP:
+                    res = OSQPSolverPtr_->getOptimalSolution(arg);
+                    break;
+            }
+            firstTime_ = false;
+        } else {
+            switch (solverSettings.solverType) {
+                case SolverSettings::SolverType::IPOPT:
+                    res = IPOPTSolver_(arg);
+                    break;
+                case SolverSettings::SolverType::SQP:
+                    res = SQPSolver_(arg);
+                    break;
+                case SolverSettings::SolverType::MIXED:
+                    // 根据收敛性能决定使用哪个求解器
+                    if (optimalTrajectory_.is_empty() ||
+                        (res.count("f") > 0 && res.at("f").scalar() > 1e-6)) {
+                        res = IPOPTSolver_(arg);
+                    } else {
+                        res = SQPSolver_(arg);
+                    }
+                    break;
+                case SolverSettings::SolverType::CUDA_SQP:
+                    res = OSQPSolverPtr_->getOptimalSolution(arg);
+                    break;
+            }
         }
-
-        optimalTrajectory_ = res.at("x");
-
-        if (solverSettings.verbose) {
-            std::cout << "\n=================== 优化结果 ===================" << std::endl;
-            std::cout << "目标函数值: " << res.at("f") << std::endl;
-            std::cout << "最优解: " << res.at("x") << std::endl;
-        }
-    } catch (const std::exception& e) {
-        throw std::runtime_error("Optimization failed: " + std::string(e.what()));
     }
+
+    if (res.empty()) {
+        throw std::runtime_error("Solver returned empty result");
+    }
+
+    optimalTrajectory_ = res.at("x");
+
+    if (solverSettings.verbose) {
+        std::cout << "\n=================== 优化结果 ===================" << std::endl;
+        std::cout << "目标函数值: " << res.at("f") << std::endl;
+        std::cout << "最优解: " << res.at("x") << std::endl;
+    }
+
 }
 
 void OptimalControlProblem::genSolver() {
@@ -237,10 +234,10 @@ void OptimalControlProblem::genSolver() {
     }
 
     ::casadi::SXDict nlp = {
-        {"x", vars},
-        {"f", getCostFunction()},
-        {"g", constraints},
-        {"p", reference_}
+            {"x", vars},
+            {"f", getCostFunction()},
+            {"g", constraints},
+            {"p", reference_}
     };
 
     ::casadi::Dict basicOptions;
@@ -300,7 +297,7 @@ void OptimalControlProblem::genSolver() {
                 sqp_options["hessian_approximation"] = "exact";
                 sqp_options["max_iter"] = solverSettings.SQP_settings.stepNum;
 
-                for (const auto& option : basicOptions) {
+                for (const auto &option: basicOptions) {
                     sqp_options[option.first] = option.second;
                 }
 
@@ -341,7 +338,7 @@ void OptimalControlProblem::genSolver() {
                 sqp_options["hessian_approximation"] = "exact";
                 sqp_options["max_iter"] = solverSettings.SQP_settings.stepNum;
 
-                for (const auto& option : basicOptions) {
+                for (const auto &option: basicOptions) {
                     sqp_options[option.first] = option.second;
                 }
 
@@ -398,7 +395,7 @@ void OptimalControlProblem::genSolver() {
                 sqp_options["max_iter"] = solverSettings.SQP_settings.stepNum;
                 sqp_options["alpha"] = solverSettings.SQP_settings.alpha;
 
-                for (const auto& option : basicOptions) {
+                for (const auto &option: basicOptions) {
                     sqp_options[option.first] = option.second;
                 }
 
@@ -426,11 +423,14 @@ void OptimalControlProblem::genSolver() {
                     if (solverSettings.verbose) {
                         std::cout << "LocalSystemFunction saved successfully to: " << target_file << std::endl;
                     }
-                    const std::string cusadi_function_path = packagePath_ + "/cusadi/src/casadi_functions/localSystemFunction.casadi";
+                    const std::string cusadi_function_path =
+                            packagePath_ + "/cusadi/src/casadi_functions/localSystemFunction.casadi";
                     std::filesystem::copy_file(target_file, cusadi_function_path,
-                           std::filesystem::copy_options::overwrite_existing);
+                                               std::filesystem::copy_options::overwrite_existing);
                     if (!std::filesystem::exists(cusadi_function_path)) {
-                        throw std::runtime_error("Failed to cp LocalSystemFunction from"+target_file.string()+"to : " + cusadi_function_path);
+                        throw std::runtime_error(
+                                "Failed to cp LocalSystemFunction from" + target_file.string() + "to : " +
+                                cusadi_function_path);
                     }
                     const std::string run_codegen_path = packagePath_ + "/cusadi/run_codegen.py";
                     const std::string command = "python3 " + run_codegen_path + " --fn=localSystemFunction";
@@ -441,23 +441,25 @@ void OptimalControlProblem::genSolver() {
                         throw std::runtime_error("Failed to run script(run_codegen.py),exit " + result);
                     }
                     if (solverSettings.verbose) {
-                        std::cout << "LocalSystemFunction successfully gen cuda code: " << packagePath_+"/cusadi/build/libLocalSystemFunction.so" << std::endl;
+                        std::cout << "LocalSystemFunction successfully gen cuda code: "
+                                  << packagePath_ + "/cusadi/build/liblocalSystemFunction.so" << std::endl;
                     }
+                    OSQPSolverPtr_->loadFromFile();
                     break;
                 }
             }
 
-            if (solverSettings.verbose) {
-                const auto num_vars = vars.size1();
-                const auto num_constraints = constraints.size1();
-                const auto num_params = reference_.size1();
-                std::cout << "Problem dimensions:\n"
-                          << "Variables: " << num_vars << "\n"
-                          << "Constraints: " << num_constraints << "\n"
-                          << "Parameters: " << num_params << std::endl;
-            }
+                if (solverSettings.verbose) {
+                    const auto num_vars = vars.size1();
+                    const auto num_constraints = constraints.size1();
+                    const auto num_params = reference_.size1();
+                    std::cout << "Problem dimensions:\n"
+                              << "Variables: " << num_vars << "\n"
+                              << "Constraints: " << num_constraints << "\n"
+                              << "Parameters: " << num_params << std::endl;
+                }
         }
-    }catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         throw std::runtime_error("Failed to generate solver: " + std::string(e.what()));
     }
 }

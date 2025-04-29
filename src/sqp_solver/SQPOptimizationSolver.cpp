@@ -5,6 +5,7 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include <filesystem>
 
 using namespace casadi;
 using namespace std::chrono;
@@ -15,15 +16,6 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict &nlp, ::casadi::Di
     stepNum_ = options.at("max_iter").as_int();
     alpha_ = options.at("alpha").as_double();
     setVerbose(options.at("verbose"));
-
-    // cusadi相关参数
-    // 加载localsystemfunction的路径
-    functionFilePath_ = ament_index_cpp::get_package_share_directory("optimal_control_problem") + "/code_gen/localSystemFunction.casadi";
-    N_ENVS = 1;
-    fn = casadi::Function::load(functionFilePath_);
-    std::cout<<"Loaded CasADi function: "<<fn.name()<<"\n";
-    solver_ = std::make_unique<CusadiFunction>(fn, N_ENVS);
-
     // 必需参数检查
     if (nlp.find("f") == nlp.end()) {
         throw std::invalid_argument("目标函数'f'未定义");
@@ -105,38 +97,42 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict &nlp, ::casadi::Di
     };
 }
 
+
+void SQPOptimizationSolver::loadFromFile(){
+    // cusadi相关参数
+    // 加载localsystemfunction的路径
+    functionFilePath_ = ament_index_cpp::get_package_share_directory("optimal_control_problem") +
+            "/code_gen/localSystemFunction.casadi";
+    N_ENVS = 1;
+    fn = casadi::Function::load(functionFilePath_);
+    std::cout<<"Loaded CasADi function: "<<fn.name()<<"\n";
+    solver_ = std::make_unique<CusadiFunction>(fn, N_ENVS);
+}
+
+
 /**
 * @brief 获取局部系统
 * @note 输入的arg保持和原来一致
 * @param arg 输入参数字典
 * @retval 局部系统的DMVector
 */
-DMVector SQPOptimizationSolver::getLocalSystem(const DMDict &arg) {
+std::vector<torch::Tensor> SQPOptimizationSolver::getLocalSystem(const DMDict &arg) {
     // 获取边界条件
     DM lbx = arg.at("lbx");
     DM ubx = arg.at("ubx");
     DM lbg = arg.at("lbg");
     DM ubg = arg.at("ubg");
-
-    // 处理参考变量p
-    // DM p;
-    // if (arg.find("p") != arg.end()) {
-    //     p = arg.at("p");
-    // } else {
-    //     p = DM::zeros(0, 1);  // 创建空矩阵作为默认值
-    // }
     DM p_dm = (arg.find("p") != arg.end()) ? arg.at("p") : DM::zeros(0, 1);
+    DM x_dm = result_.at("x");
     DM l_dm = DM::vertcat({p_dm, lbx, lbg});
     DM u_dm = DM::vertcat({p_dm, ubx, ubg});
-    // DM x_dm = result_.at("x");
-    DM x_dm = arg.at("x");
 
     // 2. 将DM转换为Tensor，并确保数据类型为kFloat64
     auto p_tensor = dmToTensor(p_dm).to(torch::kFloat64).to(torch::kCUDA);
     auto x_tensor = dmToTensor(x_dm).to(torch::kFloat64).to(torch::kCUDA);
+
     auto l_tensor = dmToTensor(l_dm).to(torch::kFloat64).to(torch::kCUDA);
     auto u_tensor = dmToTensor(u_dm).to(torch::kFloat64).to(torch::kCUDA);
-
     // 确保输入Tensor形状正确（二维列向量）
     p_tensor = p_tensor.view({p_dm.size1(), 1});
     x_tensor = x_tensor.view({x_dm.size1(), 1});
@@ -146,41 +142,20 @@ DMVector SQPOptimizationSolver::getLocalSystem(const DMDict &arg) {
     std::vector<torch::Tensor> inputs = {p_tensor, x_tensor, l_tensor, u_tensor};
     solver_->evaluate(inputs);
 
-    // 获取输出并转换回DM
-    // DMVector output;
-    // for (int i = 0; i < localSystemFunction_.n_out(); ++i) {
-    //     torch::Tensor out_tensor = solver_->getDenseOutput(i).cpu(); // 移至CPU
-    //     output.push_back(tensorToDM(out_tensor));
-    // }
-    torch::Tensor out_tensor = solver_->getDenseOutput().cpu(); // 移至CPU
+    std::vector<torch::Tensor> outTensorVector;
+    outTensorVector.push_back(solver_->getDenseOutput(0).cpu());
+    outTensorVector.push_back(solver_->getDenseOutput(1).cpu());
+    outTensorVector.push_back(solver_->getDenseOutput(2).cpu());
+    outTensorVector.push_back(solver_->getDenseOutput(3).cpu());
+    outTensorVector.push_back(solver_->getDenseOutput(4).cpu());
 
-    return out_tensor;
-    // // 调用局部系统函数
-    // DMVector localSystem = localSystemFunction_(
-    //         DMVector{p, result_.at("x"), DM::vertcat({p, lbx, lbg}), DM::vertcat({p, ubx, ubg})});
+    std::cout<<outTensorVector[0]<<std::endl;
+    std::cout<<outTensorVector[1]<<std::endl;
+    std::cout<<outTensorVector[2]<<std::endl;
+    std::cout<<outTensorVector[3]<<std::endl;
+    std::cout<<outTensorVector[4]<<std::endl;
 
-    // return localSystem;
-}
-
-/**
-* @brief 获取局部系统 (LibTorch版本)
-* @param arg 输入参数字典
-* @return 局部系统的torch::Tensor向量
-*/
-std::vector<torch::Tensor> SQPOptimizationSolver::getLocalSystemTensor(
-        const std::map<std::string, torch::Tensor> &arg) {
-    // 将Tensor输入转换为CasADi DM
-    DMDict casadiArg;
-    for (const auto &pair: arg) {
-        casadiArg[pair.first] = tensorToDM(pair.second);
-    }
-    std::vector<torch::Tensor> localSystemTensor;
-    // 使用CasADi版本获取局部系统
-//    DMVector localSystem = getLocalSystem(casadiArg);
-//    TODO : inference
-
-
-    return localSystemTensor;
+    return outTensorVector;
 }
 
 /**
@@ -194,7 +169,6 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
         std::cout << "最大迭代次数: " << stepNum_ << ", 步长因子: " << alpha_ << std::endl;
 
     }
-
     auto totalStartTime = high_resolution_clock::now();
     double totalQpSolveTime = 0.0;
     double totalLocalSystemTime = 0.0;
@@ -204,10 +178,9 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
         if (verbose_) {
             std::cout << "\n迭代 " << i + 1 << "/" << stepNum_ << std::endl;
         }
-
         // 计算局部系统时间
         auto localSystemStartTime = high_resolution_clock::now();
-        DMVector localSystem = getLocalSystem(arg);
+        std::vector<torch::Tensor> localSystem = getLocalSystem(arg);
         auto localSystemEndTime = high_resolution_clock::now();
         double localSystemTime =
                 duration_cast<microseconds>(localSystemEndTime - localSystemStartTime).count() / 1000.0;
@@ -290,114 +263,6 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
 
     return result_;
 }
-
-/**
-* @brief SQP求解方法 (LibTorch接口)
-* @param arg 输入参数字典
-* @retval 包含最优解和目标函数值的torch::Tensor字典
-*/
-std::map<std::string, torch::Tensor> SQPOptimizationSolver::getOptimalSolutionTensor(
-        const std::map<std::string, torch::Tensor> &arg) {
-    if (verbose_) {
-        std::cout << "=== SQP优化开始 (Tensor接口) ===" << std::endl;
-        std::cout << "最大迭代次数: " << stepNum_ << ", 步长因子: " << alpha_ << std::endl;
-    }
-
-    auto totalStartTime = high_resolution_clock::now();
-    double totalQpSolveTime = 0.0;
-    double totalLocalSystemTime = 0.0;
-
-    // 确保结果张量已正确初始化
-    int xSize = resultTensor_["x"].size(0);
-    resultTensor_["x"] = torch::zeros({xSize, 1});
-    resultTensor_["f"] = torch::zeros({1, 1});
-
-    for (int i = 0; i < stepNum_; ++i) {
-        if (verbose_) {
-            std::cout << "\n迭代 " << i + 1 << "/" << stepNum_ << std::endl;
-        }
-
-        // 计算局部系统时间
-        auto localSystemStartTime = high_resolution_clock::now();
-        std::vector<torch::Tensor> localSystemTensor = getLocalSystemTensor(arg);
-        auto localSystemEndTime = high_resolution_clock::now();
-        double localSystemTime =
-                duration_cast<microseconds>(localSystemEndTime - localSystemStartTime).count() / 1000.0;
-        totalLocalSystemTime += localSystemTime;
-
-        if (verbose_) {
-            std::cout << "  局部系统计算时间: " << localSystemTime << " ms" << std::endl;
-        }
-
-        // 设置并求解QP问题 (使用Tensor接口)
-        auto qpStartTime = high_resolution_clock::now();
-        qpSolver_.setSystem(localSystemTensor);
-        qpSolver_.initSolver();
-        qpSolver_.solve();
-        auto qpEndTime = high_resolution_clock::now();
-        double qpSolveTime = duration_cast<microseconds>(qpEndTime - qpStartTime).count() / 1000.0;
-        totalQpSolveTime += qpSolveTime;
-
-        if (verbose_) {
-            std::cout << "  QP求解时间: " << qpSolveTime << " ms" << std::endl;
-        }
-
-        // 获取解并更新
-        torch::Tensor solution = qpSolver_.getSolutionAsTensor();
-        torch::Tensor oldRes = resultTensor_["x"].clone();
-
-        // 根据是否存在参考变量p来更新结果
-        if (arg.find("p") == arg.end() || arg.at("p").size(0) == 0) {
-            resultTensor_["x"] = resultTensor_["x"] + alpha_ * solution;
-        } else {
-            // 从完整解中提取变量部分（排除参考变量p）
-            int pSize = arg.at("p").size(0);
-            resultTensor_["x"] = resultTensor_["x"] + alpha_ * solution.slice(0, pSize, solution.size(0));
-        }
-
-        // 计算并更新目标函数值 (通过CasADi接口)
-        torch::Tensor p_tensor = (arg.find("p") != arg.end()) ? arg.at("p") : torch::zeros({0, 1});
-        DM p_dm = tensorToDM(p_tensor);
-        DM x_dm = tensorToDM(resultTensor_["x"]);
-        DM f_dm = objectiveFunction_(DMVector{p_dm, x_dm});
-        resultTensor_["f"] = dmToTensor(f_dm);
-
-        if (verbose_) {
-            std::cout << "  当前解: " << resultTensor_["x"] << std::endl;
-            std::cout << "  当前目标函数值: " << resultTensor_["f"] << std::endl;
-
-            // 计算并显示解的变化量
-            torch::Tensor delta = resultTensor_["x"] - oldRes;
-            float normDelta = delta.norm().item<float>();
-            std::cout << "  解的变化量: " << normDelta << std::endl;
-
-            // 如果变化很小，可以提前终止
-            if (normDelta < 1e-6) {
-                std::cout << "  解收敛，提前终止迭代" << std::endl;
-                break;
-            }
-        }
-    }
-
-    auto totalEndTime = high_resolution_clock::now();
-    double totalTime = duration_cast<microseconds>(totalEndTime - totalStartTime).count() / 1000.0;
-
-    if (verbose_) {
-        std::cout << "\n=== SQP优化完成 (Tensor接口) ===" << std::endl;
-        std::cout << "总耗时: " << totalTime << " ms" << std::endl;
-        std::cout << "局部系统计算总时间: " << totalLocalSystemTime << " ms ("
-                  << std::fixed << std::setprecision(1) << (totalLocalSystemTime / totalTime * 100) << "%)"
-                  << std::endl;
-        std::cout << "QP求解总时间: " << totalQpSolveTime << " ms ("
-                  << std::fixed << std::setprecision(1) << (totalQpSolveTime / totalTime * 100) << "%)" << std::endl;
-        std::cout << "最终结果:" << std::endl;
-        std::cout << "  x = " << resultTensor_["x"] << std::endl;
-        std::cout << "  f = " << resultTensor_["f"] << std::endl;
-    }
-
-    return resultTensor_;
-}
-
 /**
 * @brief 获取局部系统函数
 * @return 局部系统函数
@@ -433,7 +298,6 @@ torch::Tensor SQPOptimizationSolver::dmToTensor(const casadi::DM &dm) {
     // 获取DM的维度
     int rows = dm.size1();
     int cols = dm.size2();
-
     // 创建torch::Tensor
     torch::Tensor tensor = torch::zeros({rows, cols}, torch::kFloat32);
     // 对于稠密矩阵，直接填充所有元素
@@ -443,56 +307,4 @@ torch::Tensor SQPOptimizationSolver::dmToTensor(const casadi::DM &dm) {
         }
     }
     return tensor;
-}
-
-/**
-* @brief 将torch::Tensor转换为CasADi DM
-* @param tensor torch::Tensor
-* @return 转换后的CasADi DM
-*/
-casadi::DM SQPOptimizationSolver::tensorToDM(const torch::Tensor &tensor) {
-    // 确保输入是CPU张量
-    auto cpuTensor = tensor.to(torch::kCPU).contiguous();
-
-    // 获取张量的维度
-    int rows = cpuTensor.size(0);
-    int cols = cpuTensor.dim() > 1 ? cpuTensor.size(1) : 1;
-
-    // 创建CasADi DM矩阵
-    DM dm = DM::zeros(rows, cols);
-
-    // 如果张量是稀疏的，需要特殊处理
-    if (cpuTensor.is_sparse()) {
-        auto indices = cpuTensor._indices();
-        auto values = cpuTensor._values();
-
-        auto indicesAccessor = indices.accessor<int64_t, 2>();
-        auto valuesAccessor = values.accessor<float, 1>();
-
-        // 填充非零元素
-        for (int k = 0; k < values.size(0); ++k) {
-            int i = indicesAccessor[0][k];
-            int j = indicesAccessor[1][k];
-            float val = valuesAccessor[k];
-            dm(i, j) = val;
-        }
-    } else {
-        // 对于稠密张量，直接填充所有元素
-        if (cols == 1) {
-            // 向量情况
-            auto accessor = cpuTensor.accessor<float, 1>();
-            for (int i = 0; i < rows; ++i) {
-                dm(i) = accessor[i];
-            }
-        } else {
-            // 矩阵情况
-            auto accessor = cpuTensor.accessor<float, 2>();
-            for (int i = 0; i < rows; ++i) {
-                for (int j = 0; j < cols; ++j) {
-                    dm(i, j) = accessor[i][j];
-                }
-            }
-        }
-    }
-    return dm;
 }
