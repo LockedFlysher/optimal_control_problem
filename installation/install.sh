@@ -211,6 +211,7 @@ install_osqp_eigen() {
         echo "Configuring OSQP_Eigen with CUDA support..."
         # 使用与您之前成功脚本相同的配置
         cmake .. \
+            -DCMAKE_BUILD_TYPE=Release \
             -DOSQP_DIR=/usr/local \
             -DCMAKE_CXX_FLAGS="-L$CUDA_PATH/lib64"
     else
