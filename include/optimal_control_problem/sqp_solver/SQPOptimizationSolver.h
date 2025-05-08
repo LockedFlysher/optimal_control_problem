@@ -35,7 +35,7 @@ public:
      * @brief 获取局部系统函数
      * @return 返回局部系统函数
      */
-    casadi::Function getSXLocalSystemFunction() const;
+    [[nodiscard]] casadi::Function getSXLocalSystemFunction() const;
 
     /**
      * @brief 设置是否输出详细信息
@@ -70,10 +70,9 @@ private:
     std::string functionFilePath_; // 存储localsystemfunction的路径
     int N_ENVS;
     casadi::Function fn;
-    std::unique_ptr<CusadiFunction> solver_; // 智能指针成员
+    std::unique_ptr<CasadiGpuEvaluator> solver_; // 智能指针成员
 
-
-    // 优化结果
+    // 优化结果，使用Dict取出来
     casadi::DMDict result_;
     std::map<std::string, torch::Tensor> resultTensor_;
 
@@ -113,5 +112,5 @@ private:
      * @param tensor torch::Tensor
      * @return 转换后的CasADi DM
      */
-    casadi::DM tensorToDM(const torch::Tensor &tensor);
+//    casadi::DM tensorToDM(const torch::Tensor &tensor);
 };

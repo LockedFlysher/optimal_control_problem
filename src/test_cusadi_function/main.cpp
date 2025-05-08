@@ -13,7 +13,7 @@ int main() {
 
     // 2. 创建 CusadiFunction
     int N_ENVS = 1;
-    CusadiFunction solver(fn, N_ENVS);
+    CasadiGpuEvaluator solver(fn, N_ENVS);
 
     // 3. 构造输入 tensors
     auto p = torch::tensor({0.5}, torch::kFloat64).to(torch::kCUDA);
@@ -25,11 +25,11 @@ int main() {
     std::vector<torch::Tensor> inputs = {p, x, l, u};
 
     // 4. 求解
-    solver.evaluate(inputs);
+    solver.compute(inputs);
 
     // 5. 打印输出
     for (int i = 0; i < fn.n_out(); ++i) {
-        auto D = solver.getDenseOutput(i);
+        auto D = solver.getDenseResult(i);
         std::cout<<"Output "<<i<<" =\n"<<D<<std::endl;
         // std::cout<<"Output "<<i<<" =\n"<<D.cpu()<<std::endl;
     }

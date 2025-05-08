@@ -1,18 +1,20 @@
 //
 // Created by lock on 25-4-28.
+// Updated by Monica on 25-5-8 to remove multi-instance support, rename APIs, and add CPU support.
 //
 #include "optimal_control_problem/cusadi_function/CusadiFunction.h"
 #include <iostream>
-#include <cuda_runtime.h>  // 用于cudaDeviceSynchronize等CUDA运行时函数
+#include <cuda_runtime.h>  // 用于 cudaDeviceSynchronize 等 CUDA 运行时函数
 
 /**
- * @brief 构造函数，初始化CusadiFunction对象
- * @param fn_casadi CasADi函数对象
- * @param num_instances 并行实例数量
+ * @brief 构造函数，初始化 CasadiGpuEvaluator 对象
+ * @param fn_casadi CasADi 函数对象
+ * @param use_cuda 是否使用 CUDA 加速，true 为 GPU，false 为 CPU
  */
-CusadiFunction::CusadiFunction(const casadi::Function &fn_casadi, int num_instances)
-        : fn_(fn_casadi), num_instances_(num_instances) {
-    // 加载CUDA共享库，直接加载的就是这么一个函数，不用做任何的路径修改，先暴力地这么做
+CasadiGpuEvaluator::CasadiGpuEvaluator(const casadi::Function &fn_casadi, bool use_cuda)
+        : fn_(fn_casadi), use_cuda_(use_cuda), lib_handle_(nullptr), eval_fn_(nullptr) {
+
+    // 加载动态库，无论是 CPU 还是 GPU 模式都需要
     std::string path = ament_index_cpp::get_package_share_directory("optimal_control_problem") +
                        "/cusadi/build/liblocalSystemFunction.so";
     lib_handle_ = dlopen(path.c_str(), RTLD_LAZY);
@@ -20,61 +22,68 @@ CusadiFunction::CusadiFunction(const casadi::Function &fn_casadi, int num_instan
         std::cerr << "dlopen failed: " << dlerror();
         std::exit(1);
     }
+
     // 获取评估函数指针
     eval_fn_ = reinterpret_cast<EvalFn>(dlsym(lib_handle_, "evaluate"));
     if (!eval_fn_) {
         std::cerr << "dlsym evaluate failed: " << dlerror();
         std::exit(1);
     }
-    // 设置张量和工作空间
-    setup();
+
+    // 初始化张量和工作空间
+    initializeTensors();
 }
 
 /**
  * @brief 析构函数，释放动态库资源
  */
-CusadiFunction::~CusadiFunction() {
-    if (lib_handle_) dlclose(lib_handle_);
+CasadiGpuEvaluator::~CasadiGpuEvaluator() {
+    if (lib_handle_) {
+        dlclose(lib_handle_);
+    }
 }
 
 /**
- * @brief 设置计算所需的张量和工作空间
+ * @brief 初始化计算所需的张量和工作空间
  */
-void CusadiFunction::setup() {
+void CasadiGpuEvaluator::initializeTensors() {
     int n_in = fn_.n_in(), n_out = fn_.n_out();
     input_tensors_.resize(n_in);
     output_tensors_.resize(n_out);
     output_tensors_dense_.resize(n_out);
 
+    // 根据 use_cuda_ 选择设备
+    torch::Device device = use_cuda_ ? torch::kCUDA : torch::kCPU;
+
     // 初始化输入张量
     for (int i = 0; i < n_in; ++i) {
         int nnz = fn_.nnz_in(i);
-        input_tensors_[i] = torch::zeros({num_instances_, nnz}, torch::kFloat64).contiguous().to(torch::kCUDA);
+        input_tensors_[i] = torch::zeros({nnz}, torch::kFloat64).contiguous().to(device);
     }
 
     // 初始化输出张量
     for (int i = 0; i < n_out; ++i) {
         int nnz = fn_.nnz_out(i);
-        output_tensors_[i] = torch::zeros({num_instances_, nnz}, torch::kFloat64).contiguous().to(torch::kCUDA);
+        output_tensors_[i] = torch::zeros({nnz}, torch::kFloat64).contiguous().to(device);
         output_tensors_dense_[i] = torch::zeros(
-                {num_instances_, static_cast<int64_t>(fn_.size1_out(i)), static_cast<int64_t>(fn_.size2_out(i))},
-                torch::kFloat64).to(torch::kCUDA);
+                {static_cast<int64_t>(fn_.size1_out(i)), static_cast<int64_t>(fn_.size2_out(i))},
+                torch::kFloat64).to(device);
     }
 
     // 初始化工作空间
-    work_tensor_ = torch::zeros({num_instances_, static_cast<int64_t>(fn_.sz_w())},
-                                torch::kFloat64).contiguous().to(torch::kCUDA);
+    work_tensor_ = torch::zeros({static_cast<int64_t>(fn_.sz_w())},
+                                torch::kFloat64).contiguous().to(device);
 
-    // 创建存储指针的GPU张量
-    input_ptrs_tensor_ = torch::empty({n_in}, torch::kInt64).to(torch::kCUDA);
-    output_ptrs_tensor_ = torch::empty({n_out}, torch::kInt64).to(torch::kCUDA);
+    // 创建存储指针的张量（在相应设备上）
+    input_ptrs_tensor_ = torch::empty({n_in}, torch::kInt64).to(device);
+    output_ptrs_tensor_ = torch::empty({n_out}, torch::kInt64).to(device);
 }
 
 /**
  * @brief 清除输出和工作空间张量
  */
-void CusadiFunction::clearTensors() {
-    for (auto &t: output_tensors_) {
+void CasadiGpuEvaluator::resetTensors() {
+    for (auto &t : output_tensors_) {
         t.zero_();
     }
     work_tensor_.zero_();
@@ -84,23 +93,24 @@ void CusadiFunction::clearTensors() {
  * @brief 准备输入张量
  * @param inputs 输入张量列表
  */
-void CusadiFunction::prepareInputTensors(const std::vector<torch::Tensor> &inputs) {
+void CasadiGpuEvaluator::formatInputTensors(const std::vector<torch::Tensor> &inputs) {
     const size_t num_inputs = std::min(inputs.size(), input_tensors_.size());
+    torch::Device device = use_cuda_ ? torch::kCUDA : torch::kCPU;
     for (size_t i = 0; i < num_inputs; ++i) {
-        input_tensors_[i] = inputs[i].contiguous().to(torch::kCUDA);
+        input_tensors_[i] = inputs[i].contiguous().to(device);
     }
 }
 
 /**
- * @brief 执行CUDA计算
+ * @brief 执行计算
  * @param inputs 输入张量列表
  */
-void CusadiFunction::evaluate(const std::vector<torch::Tensor> &inputs) {
+void CasadiGpuEvaluator::compute(const std::vector<torch::Tensor> &inputs) {
     // 清除之前的计算结果
-    clearTensors();
+    resetTensors();
 
     // 准备输入张量
-    prepareInputTensors(inputs);
+    formatInputTensors(inputs);
 
     // 在主机端准备输入指针数组
     std::vector<int64_t> h_input_ptrs(input_tensors_.size());
@@ -128,55 +138,49 @@ void CusadiFunction::evaluate(const std::vector<torch::Tensor> &inputs) {
     double *d_work = work_tensor_.data_ptr<double>();
     int64_t *d_output_ptrs = output_ptrs_tensor_.data_ptr<int64_t>();
 
-    // 调用CUDA函数
-    float execution_time = eval_fn_(d_input_ptrs, d_work, d_output_ptrs, num_instances_);
+    // 调用评估函数，传递 1 作为实例数量（已移除多实例支持）
+    float execution_time = eval_fn_(d_input_ptrs, d_work, d_output_ptrs, 1);
 
-    // 错误检查
-    cudaDeviceSynchronize();
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        std::cerr << "CUDA error after evaluate: " << cudaGetErrorString(err) << std::endl;
-        std::exit(1);
+    // 如果是 GPU 模式，执行 CUDA 同步和错误检查
+    if (use_cuda_) {
+        cudaDeviceSynchronize();
+        cudaError_t err = cudaGetLastError();
+        if (err != cudaSuccess) {
+            std::cerr << "CUDA error after evaluate: " << cudaGetErrorString(err) << std::endl;
+            std::exit(1);
+        }
     }
 }
 
 /**
  * @brief 获取密集格式的输出张量
- * @param out_idx 输出索引
+ * @param output_index 输出索引
  * @return 密集格式的输出张量
  */
-torch::Tensor CusadiFunction::getDenseOutput(int out_idx) {
-    // 获取稀疏矩阵的三元组表示(triplet)
+torch::Tensor CasadiGpuEvaluator::getDenseResult(int output_index) {
+    // 获取稀疏矩阵的三元组表示 (triplet)
     std::vector<casadi_int> rows, cols;
-    fn_.sparsity_out(out_idx).get_triplet(rows, cols);
+    fn_.sparsity_out(output_index).get_triplet(rows, cols);
     int nnz = static_cast<int>(rows.size());
+
+    torch::Device device = use_cuda_ ? torch::kCUDA : torch::kCPU;
 
     // 如果没有非零元素，直接返回零张量
     if (nnz == 0) {
-        return torch::zeros({num_instances_, fn_.size1_out(out_idx), fn_.size2_out(out_idx)},
-                            torch::kFloat64).to(torch::kCUDA);
+        return torch::zeros({fn_.size1_out(output_index), fn_.size2_out(output_index)},
+                            torch::kFloat64).to(device);
     }
 
-    // 创建索引张量 - 使用unsqueeze和expand代替repeat以提高性能
-    auto env_idx = torch::arange(num_instances_, torch::kInt64)
-            .unsqueeze(1).expand({-1, nnz}).reshape(-1).to(torch::kCUDA);
-
-    // 使用from_blob创建行索引张量
-    auto row_idx = torch::from_blob(rows.data(), {nnz}, torch::kInt64)
-            .expand({num_instances_, -1}).reshape(-1).to(torch::kCUDA);
-
-    // 使用from_blob创建列索引张量
-    auto col_idx = torch::from_blob(cols.data(), {nnz}, torch::kInt64)
-            .expand({num_instances_, -1}).reshape(-1).to(torch::kCUDA);
+    // 创建索引张量
+    auto row_idx = torch::from_blob(rows.data(), {nnz}, torch::kInt64).to(device);
+    auto col_idx = torch::from_blob(cols.data(), {nnz}, torch::kInt64).to(device);
 
     // 获取值并转换为密集张量
-    auto vals = output_tensors_[out_idx].reshape(-1);
+    auto vals = output_tensors_[output_index].reshape(-1);
+
+    // 创建稀疏张量并可能返回密集表示
     return torch::sparse_coo_tensor(
-            torch::stack({env_idx, row_idx, col_idx}), vals,
-            {num_instances_, fn_.size1_out(out_idx), fn_.size2_out(out_idx)}
-    );
-//    return torch::sparse_coo_tensor(
-//            torch::stack({env_idx, row_idx, col_idx}), vals,
-//            {num_instances_, fn_.size1_out(out_idx), fn_.size2_out(out_idx)}
-//    ).to_dense();
+            torch::stack({row_idx, col_idx}), vals,
+            {fn_.size1_out(output_index), fn_.size2_out(output_index)}
+    ).to_dense().to(device);
 }

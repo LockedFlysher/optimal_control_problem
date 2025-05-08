@@ -106,7 +106,7 @@ void SQPOptimizationSolver::loadFromFile(){
     N_ENVS = 1;
     fn = casadi::Function::load(functionFilePath_);
     std::cout<<"Loaded CasADi function: "<<fn.name()<<"\n";
-    solver_ = std::make_unique<CusadiFunction>(fn, N_ENVS);
+    solver_ = std::make_unique<CasadiGpuEvaluator>(fn, false);
 }
 
 
@@ -140,13 +140,13 @@ std::vector<torch::Tensor> SQPOptimizationSolver::getLocalSystem(const DMDict &a
     u_tensor = u_tensor.view({u_dm.size1(), 1});
 
     std::vector<torch::Tensor> inputs = {p_tensor, x_tensor, l_tensor, u_tensor};
-    solver_->evaluate(inputs);
+    solver_->compute(inputs);
     std::vector<torch::Tensor> outTensorVector;
-    outTensorVector.push_back(solver_->getDenseOutput(0).cpu());
-    outTensorVector.push_back(solver_->getDenseOutput(1).cpu());
-    outTensorVector.push_back(solver_->getDenseOutput(2).cpu());
-    outTensorVector.push_back(solver_->getDenseOutput(3).cpu());
-    outTensorVector.push_back(solver_->getDenseOutput(4).cpu());
+    outTensorVector.push_back(solver_->getDenseResult(0).cpu());
+    outTensorVector.push_back(solver_->getDenseResult(1).cpu());
+    outTensorVector.push_back(solver_->getDenseResult(2).cpu());
+    outTensorVector.push_back(solver_->getDenseResult(3).cpu());
+    outTensorVector.push_back(solver_->getDenseResult(4).cpu());
     return outTensorVector;
 }
 

@@ -1,50 +1,88 @@
 //
 // Created by lock on 25-4-28.
+// Updated by Monica on 25-5-8 to remove multi-instance support, rename APIs, and add CPU support.
 //
 
-#ifndef BUILD_CUSADIFUNCTION_H
-#define BUILD_CUSADIFUNCTION_H
+#ifndef BUILD_CASADI_GPU_EVALUATOR_H
+#define BUILD_CASADI_GPU_EVALUATOR_H
 
 #include <vector>
 #include <string>
 #include <dlfcn.h>
-//一定要先casadi再torch，// 否则会报错
+// 必须先包含 casadi 再包含 torch，否则会报错
 #include <casadi/casadi.hpp>
 #include <torch/torch.h>
 #include <ament_index_cpp/get_package_share_directory.hpp>
 
-class CusadiFunction {
+/**
+ * @class CasadiGpuEvaluator
+ * @brief 用于评估 CasADi 函数的类，支持 GPU 和 CPU 计算
+ *        该类将 CasADi 函数与 PyTorch 张量结合，可在指定设备上进行计算
+ */
+class CasadiGpuEvaluator {
 public:
-    CusadiFunction(const casadi::Function& fn_casadi, int num_instances);
-    ~CusadiFunction();
+    /**
+     * @brief 构造函数，初始化 CasADi 函数评估器
+     * @param fn_casadi CasADi 函数对象
+     * @param use_cuda 是否使用 CUDA 加速，默认为 true；如果为 false，则在 CPU 上进行计算
+     */
+    CasadiGpuEvaluator(const casadi::Function& fn_casadi, bool use_cuda = true);
 
-    void evaluate(const std::vector<torch::Tensor>& inputs);
-    torch::Tensor getDenseOutput(int out_idx);
+    /**
+     * @brief 析构函数，释放动态库资源
+     */
+    ~CasadiGpuEvaluator();
+
+    /**
+     * @brief 执行 CasADi 函数计算
+     * @param inputs 输入张量列表
+     */
+    void compute(const std::vector<torch::Tensor>& inputs);
+
+    /**
+     * @brief 获取指定输出的密集格式张量
+     * @param output_index 输出张量的索引
+     * @return 密集格式的输出张量
+     */
+    torch::Tensor getDenseResult(int output_index);
 
 private:
-    void setup();
-    void clearTensors();
-    void prepareInputTensors(const std::vector<torch::Tensor>& inputs);
+    /**
+     * @brief 初始化张量和工作空间
+     */
+    void initializeTensors();
 
-    casadi::Function fn_;
-    int num_instances_;
+    /**
+     * @brief 清除输出和工作空间张量
+     */
+    void resetTensors();
 
-    void* lib_handle_;
+    /**
+     * @brief 准备输入张量
+     * @param inputs 输入张量列表
+     */
+    void formatInputTensors(const std::vector<torch::Tensor>& inputs);
+
+    casadi::Function fn_;  // CasADi 函数对象
+    bool use_cuda_;        // 是否使用 CUDA 加速的标志
+    void* lib_handle_;     // 动态库句柄
+
+    // 定义评估函数指针类型
     using EvalFn = float(*)(int64_t*, double*, int64_t*, int);
-    EvalFn eval_fn_;
+    EvalFn eval_fn_;       // 评估函数指针
 
-    std::vector<torch::Tensor> input_tensors_;
-    std::vector<torch::Tensor> output_tensors_;
-    std::vector<torch::Tensor> output_tensors_dense_;
-    torch::Tensor work_tensor_;
+    std::vector<torch::Tensor> input_tensors_;  // 输入张量列表
+    std::vector<torch::Tensor> output_tensors_; // 输出张量列表
+    std::vector<torch::Tensor> output_tensors_dense_; // 密集格式的输出张量列表
+    torch::Tensor work_tensor_;                 // 工作空间张量
 
-    // 指针数组用 GPU上的指针数组 存储
-    torch::Tensor input_ptrs_tensor_;  // GPU上的指针数组
-    torch::Tensor output_ptrs_tensor_; // GPU上的指针数组
+    // 指针数组张量
+    torch::Tensor input_ptrs_tensor_;   // 输入指针数组
+    torch::Tensor output_ptrs_tensor_;  // 输出指针数组
 
-    int64_t* fn_input_ptrs_;
-    double* fn_work_ptr_;
-    int64_t* fn_output_ptrs_;
+    int64_t* fn_input_ptrs_;    // 函数输入指针
+    double* fn_work_ptr_;       // 函数工作空间指针
+    int64_t* fn_output_ptrs_;   // 函数输出指针
 };
 
-#endif //BUILD_CUSADIFUNCTION_H
+#endif // BUILD_CASADI_GPU_EVALUATOR_H
