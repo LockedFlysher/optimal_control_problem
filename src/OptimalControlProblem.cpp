@@ -434,6 +434,7 @@ void OptimalControlProblem::genSolver() {
                     }
                     const std::string run_codegen_path = packagePath_ + "/cusadi/run_codegen.py";
                     const std::string command = "python3 " + run_codegen_path + " --fn=localSystemFunction";
+                    std::cout<<"compiling casadi function to .so for torch acceleration :"<<command<<"\n";
                     int result = std::system(command.c_str());
                     // 检查命令执行结果
                     if (result != 0) {
