@@ -1,5 +1,7 @@
 #include "optimal_control_problem/sqp_solver/CuCaQP.h"
 #include <iostream>
+#include <algorithm>
+
 
 CuCaQP::CuCaQP() :
         numOfVariables_(0),
@@ -52,25 +54,50 @@ bool CuCaQP::setDimension(int numOfVariables, int numOfConstraints) {
     return true;
 }
 bool CuCaQP::setHessianMatrix(const torch::Tensor &hessian) {
-    // 只在verbose_模式下打印接收到的Hessian矩阵维度
-    if (verbose_) {
-        std::cout << "接收到Hessian矩阵: 维度=[" << hessian.size(0) << "x" << hessian.size(1)
-                  << "], 期望维度=[" << numOfVariables_ << "x" << numOfVariables_ << "]" << std::endl;
-    }
-    // 先清理之前的Hessian矩阵
+    // 清理之前的 Hessian 矩阵
     solver_.data()->clearHessianMatrix();
-    // 检查维度
-    if (hessian.size(0) != numOfVariables_ || hessian.size(1) != numOfVariables_) {
-        std::cerr << "Error: Hessian matrix dimensions mismatch. Expected "
-                  << numOfVariables_ << "x" << numOfVariables_ << std::endl;
+
+    // 快速检查维度是否匹配
+    bool dimensions_ok = (hessian.dim() == 2 &&
+                          hessian.size(0) == numOfVariables_ &&
+                          hessian.size(1) == numOfVariables_);
+
+    // 只有在维度不匹配时才打印详细的诊断信息
+    if (!dimensions_ok) {
+        std::cerr << "\n===== Hessian 矩阵维度错误 =====\n";
+        std::cerr << "预期维度: [" << numOfVariables_ << " x " << numOfVariables_ << "]\n";
+        std::cerr << "实际维度数量: " << hessian.dim() << "\n";
+
+        // 安全地打印每个维度
+        std::cerr << "实际形状: [";
+        for (int i = 0; i < hessian.dim(); i++) {
+            std::cerr << hessian.size(i);
+            if (i < hessian.dim() - 1) std::cerr << " x ";
+        }
+        std::cerr << "]\n";
+
+        // 打印其他有用的诊断信息
+        std::cerr << "数据类型: " << hessian.dtype() << "\n";
+        std::cerr << "设备位置: " << hessian.device() << "\n";
+        std::cerr << "是否稀疏: " << (hessian.is_sparse() ? "是" : "否") << "\n";
+
+        // 打印总元素数量
+        std::cerr << "总元素数量: " << hessian.numel() << "\n";
+
+        // 如果是1D张量，可能是被错误地展平了
+        if (hessian.dim() == 1 && hessian.size(0) == numOfVariables_ * numOfVariables_) {
+            std::cerr << "警告: 检测到1D张量，可能需要调整形状为 [" << numOfVariables_
+                      << ", " << numOfVariables_ << "]\n";
+        }
+
+        std::cerr << "================================\n";
         return false;
     }
 
-    // 使用优化的转换函数
+    // 维度匹配，继续正常处理
     hessianMatrix = torchTensorToEigenSparse<OSQPFloat>(hessian);
-
-    // 设置到求解器
     bool result = solver_.data()->setHessianMatrix(hessianMatrix);
+
     return result;
 }
 
@@ -262,24 +289,6 @@ void CuCaQP::printSolverData() {
 //        std::cout << osqpData->q[i] << " ";
 //    }
 //    if (osqpData->n > maxPrintQ) std::cout << "...";
-    std::cout << std::endl;
-
-    // 打印下界l的前几个元素
-    std::cout << "下界l (维度: " << osqpData->m << "):\n";
-    const int maxPrintL = std::min(5, osqpData->m); // 最多打印5个元素
-    for (int i = 0; i < maxPrintL; i++) {
-        std::cout << osqpData->l[i] << " ";
-    }
-    if (osqpData->m > maxPrintL) std::cout << "...";
-    std::cout << std::endl;
-
-    // 打印上界u的前几个元素
-    std::cout << "上界u (维度: " << osqpData->m << "):\n";
-    const int maxPrintU = std::min(5, osqpData->m); // 最多打印5个元素
-    for (int i = 0; i < maxPrintU; i++) {
-        std::cout << osqpData->u[i] << " ";
-    }
-    if (osqpData->m > maxPrintU) std::cout << "...";
     std::cout << std::endl;
 
     // 打印P矩阵信息及有限个非零元素

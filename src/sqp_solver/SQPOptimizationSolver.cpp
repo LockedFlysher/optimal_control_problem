@@ -106,7 +106,7 @@ void SQPOptimizationSolver::loadFromFile(){
     N_ENVS = 1;
     fn = casadi::Function::load(functionFilePath_);
     std::cout<<"Loaded CasADi function: "<<fn.name()<<"\n";
-    solver_ = std::make_unique<CasadiGpuEvaluator>(fn, false);
+    solver_ = std::make_unique<CasadiGpuEvaluator>(fn);
 }
 
 

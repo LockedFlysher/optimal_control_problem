@@ -1,4 +1,4 @@
-#include "optimal_control_problem/cusadi_function/CusadiFunction.h"
+#include "optimal_control_problem/cusadi_function/CasadiGpuEvaluator.h"
 //一定要先casadi再torch，// 否则会报错
 #include <casadi/casadi.hpp>
 #include <torch/torch.h>
@@ -13,7 +13,7 @@ int main() {
 
     // 2. 创建 CusadiFunction
     int N_ENVS = 1;
-    CasadiGpuEvaluator solver(fn, N_ENVS);
+    CasadiGpuEvaluator solver(fn);
 
     // 3. 构造输入 tensors
     auto p = torch::tensor({0.5}, torch::kFloat64).to(torch::kCUDA);

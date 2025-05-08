@@ -445,11 +445,10 @@ void OptimalControlProblem::genSolver() {
                         std::cout << "LocalSystemFunction successfully gen cuda code: "
                                   << packagePath_ + "/cusadi/build/liblocalSystemFunction.so" << std::endl;
                     }
-                    OSQPSolverPtr_->loadFromFile();
                     break;
                 }
+                OSQPSolverPtr_->loadFromFile();
             }
-
                 if (solverSettings.verbose) {
                     const auto num_vars = vars.size1();
                     const auto num_constraints = constraints.size1();
