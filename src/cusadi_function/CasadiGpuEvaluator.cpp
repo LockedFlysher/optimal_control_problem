@@ -64,9 +64,6 @@ CasadiGpuEvaluator::CasadiGpuEvaluator(const casadi::Function &fn_casadi)
     initializeTensors();
 }
 
-/**
- * @brief 初始化计算所需的张量和工作空间
- */
 void CasadiGpuEvaluator::initializeTensors() {
     try {
         int n_in = fn_.n_in(), n_out = fn_.n_out();
@@ -81,12 +78,40 @@ void CasadiGpuEvaluator::initializeTensors() {
         size_t total_input_size = 0;
         size_t total_output_size = 0;
 
+        // 打印输入输出张量的详细维度信息
+        std::cout << "\n====== CasadiGpuEvaluator 张量维度信息 ======" << std::endl;
+
+        // 打印输入张量信息
+        std::cout << "输入张量 (" << n_in << "):" << std::endl;
+        for (int i = 0; i < n_in; ++i) {
+            std::cout << "  输入[" << i << "]: 形状 = [" << fn_.size1_in(i) << " x " << fn_.size2_in(i)
+                      << "], 非零元素 = " << fn_.nnz_in(i);
+            if (fn_.size1_in(i) * fn_.size2_in(i) > 0) {
+                double sparsity = 100.0 * fn_.nnz_in(i) / (fn_.size1_in(i) * fn_.size2_in(i));
+                std::cout << ", 稀疏度 = " << sparsity << "%";
+            }
+            std::cout << std::endl;
+        }
+
         // 初始化输入张量
         for (int i = 0; i < n_in; ++i) {
             int nnz = fn_.nnz_in(i);
             total_input_size += nnz * sizeof(double);
             input_tensors_[i] = torch::zeros({nnz}, torch::kFloat64).contiguous().to(device);
         }
+
+        // 打印输出张量信息
+        std::cout << "输出张量 (" << n_out << "):" << std::endl;
+        for (int i = 0; i < n_out; ++i) {
+            std::cout << "  输出[" << i << "]: 形状 = [" << fn_.size1_out(i) << " x " << fn_.size2_out(i)
+                      << "], 非零元素 = " << fn_.nnz_out(i);
+            if (fn_.size1_out(i) * fn_.size2_out(i) > 0) {
+                double sparsity = 100.0 * fn_.nnz_out(i) / (fn_.size1_out(i) * fn_.size2_out(i));
+                std::cout << ", 稀疏度 = " << sparsity << "%";
+            }
+            std::cout << std::endl;
+        }
+        std::cout << "=============================================" << std::endl;
 
         // 初始化输出张量
         for (int i = 0; i < n_out; ++i) {
@@ -108,12 +133,10 @@ void CasadiGpuEvaluator::initializeTensors() {
         d_output_ptrs_ = nullptr;
 
         // 如果是CUDA模式，预分配设备指针数组
-
         CHECK_CUDA_ERROR(cudaMalloc(&d_input_ptrs_, n_in * sizeof(void *)),
                          "分配输入指针数组内存失败");
         CHECK_CUDA_ERROR(cudaMalloc(&d_output_ptrs_, n_out * sizeof(void *)),
                          "分配输出指针数组内存失败");
-
 
         std::cout << "CusADi推理神经网络初始化完成: "
                   << n_in << " 个Tensor输入, "
@@ -236,11 +259,6 @@ void CasadiGpuEvaluator::computeGPU() {
     CHECK_CUDA_ERROR(cudaGetLastError(), "CUDA内核执行错误");
 }
 
-/**
- * @brief 获取密集格式的输出张量
- * @param output_index 输出索引
- * @return 密集格式的输出张量
- */
 torch::Tensor CasadiGpuEvaluator::getDenseResult(int output_index) {
     // 检查输出索引是否有效
     if (output_index < 0 || output_index >= output_tensors_.size()) {
@@ -255,13 +273,17 @@ torch::Tensor CasadiGpuEvaluator::getDenseResult(int output_index) {
         std::vector<casadi_int> rows, cols;
         fn_.sparsity_out(output_index).get_triplet(rows, cols);
         int nnz = static_cast<int>(rows.size());
+        int nrows = fn_.size1_out(output_index);
+        int ncols = fn_.size2_out(output_index);
 
         torch::Device device = torch::kCUDA;
 
         // 如果没有非零元素，直接返回零张量
         if (nnz == 0) {
-            return torch::zeros({fn_.size1_out(output_index), fn_.size2_out(output_index)},
-                                torch::kFloat64).to(device);
+            auto result = torch::zeros({nrows, ncols}, torch::kFloat64).to(device);
+            std::cout << "getDenseResult(" << output_index << "): 返回零张量, 形状 = ["
+                      << result.sizes()[0] << " x " << result.sizes()[1] << "]" << std::endl;
+            return result;
         }
 
         // 创建索引张量
@@ -272,10 +294,26 @@ torch::Tensor CasadiGpuEvaluator::getDenseResult(int output_index) {
         auto vals = output_tensors_[output_index].reshape(-1);
 
         // 创建稀疏张量并返回密集表示
-        return torch::sparse_coo_tensor(
+        auto result = torch::sparse_coo_tensor(
                 torch::stack({row_idx, col_idx}), vals,
-                {fn_.size1_out(output_index), fn_.size2_out(output_index)}
+                {nrows, ncols}
         ).to_dense().to(device);
+
+        // 打印转换后的结果维度
+        std::cout << "getDenseResult(" << output_index << "): 返回张量, 形状 = [";
+        for (int i = 0; i < result.dim(); i++) {
+            std::cout << result.sizes()[i];
+            if (i < result.dim() - 1) std::cout << " x ";
+        }
+        std::cout << "]" << std::endl;
+
+        // 确保返回的是二维张量
+        if (result.dim() == 1 && nrows > 1 && ncols > 1) {
+            std::cout << "警告: 结果被意外展平，尝试重塑回 [" << nrows << " x " << ncols << "]" << std::endl;
+            return result.reshape({nrows, ncols});
+        }
+
+        return result;
     } catch (const std::exception &e) {
         std::cerr << "获取密集结果时发生错误: " << e.what() << std::endl;
         // 返回空张量
