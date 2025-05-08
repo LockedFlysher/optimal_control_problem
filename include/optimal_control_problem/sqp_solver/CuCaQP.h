@@ -284,7 +284,7 @@ public:
 
     // 设置优化问题数据 - torch::Tensor版本
     // 设置系统 - torch::Tensor版本
-    void setSystem(const std::vector<torch::Tensor> &torchSystem,uint env=0);
+    void setSystem(const std::vector<torch::Tensor> &torchSystem);
 
     bool setHessianMatrix(const torch::Tensor &hessian);
     bool setGradient(const torch::Tensor &q);

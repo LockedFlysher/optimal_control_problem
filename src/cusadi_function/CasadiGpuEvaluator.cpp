@@ -281,8 +281,6 @@ torch::Tensor CasadiGpuEvaluator::getDenseResult(int output_index) {
         // 如果没有非零元素，直接返回零张量
         if (nnz == 0) {
             auto result = torch::zeros({nrows, ncols}, torch::kFloat64).to(device);
-            std::cout << "getDenseResult(" << output_index << "): 返回零张量, 形状 = ["
-                      << result.sizes()[0] << " x " << result.sizes()[1] << "]" << std::endl;
             return result;
         }
 
@@ -300,7 +298,6 @@ torch::Tensor CasadiGpuEvaluator::getDenseResult(int output_index) {
         ).to_dense().to(device);
 
         // 打印转换后的结果维度
-        std::cout << "getDenseResult(" << output_index << "): 返回张量, 形状 = [";
         for (int i = 0; i < result.dim(); i++) {
             std::cout << result.sizes()[i];
             if (i < result.dim() - 1) std::cout << " x ";

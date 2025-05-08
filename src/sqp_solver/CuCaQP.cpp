@@ -57,13 +57,8 @@ bool CuCaQP::setHessianMatrix(const torch::Tensor &hessian) {
     // 清理之前的 Hessian 矩阵
     solver_.data()->clearHessianMatrix();
 
-    // 快速检查维度是否匹配
-    bool dimensions_ok = (hessian.dim() == 2 &&
-                          hessian.size(0) == numOfVariables_ &&
-                          hessian.size(1) == numOfVariables_);
-
-    // 只有在维度不匹配时才打印详细的诊断信息
-    if (!dimensions_ok) {
+    // 详细检查维度并提供诊断信息
+    if (hessian.dim() != 2 || hessian.size(0) != numOfVariables_ || hessian.size(1) != numOfVariables_) {
         std::cerr << "\n===== Hessian 矩阵维度错误 =====\n";
         std::cerr << "预期维度: [" << numOfVariables_ << " x " << numOfVariables_ << "]\n";
         std::cerr << "实际维度数量: " << hessian.dim() << "\n";
@@ -80,14 +75,12 @@ bool CuCaQP::setHessianMatrix(const torch::Tensor &hessian) {
         std::cerr << "数据类型: " << hessian.dtype() << "\n";
         std::cerr << "设备位置: " << hessian.device() << "\n";
         std::cerr << "是否稀疏: " << (hessian.is_sparse() ? "是" : "否") << "\n";
-
-        // 打印总元素数量
         std::cerr << "总元素数量: " << hessian.numel() << "\n";
 
-        // 如果是1D张量，可能是被错误地展平了
-        if (hessian.dim() == 1 && hessian.size(0) == numOfVariables_ * numOfVariables_) {
-            std::cerr << "警告: 检测到1D张量，可能需要调整形状为 [" << numOfVariables_
-                      << ", " << numOfVariables_ << "]\n";
+        // 添加智能提示
+        if (hessian.dim() == 1 && hessian.numel() == numOfVariables_ * numOfVariables_) {
+            std::cerr << "提示: 检测到一维向量，可能需要重塑为 [" << numOfVariables_ << ", "
+                      << numOfVariables_ << "] 的矩阵\n";
         }
 
         std::cerr << "================================\n";
@@ -323,17 +316,17 @@ void CuCaQP::printSolverData() {
 }
 
 
-void CuCaQP::setSystem(const std::vector<torch::Tensor> &torchSystem, uint env) {
+void CuCaQP::setSystem(const std::vector<torch::Tensor> &torchSystem) {
     // 检查输入向量大小
     if (torchSystem.size() != 5) {
         std::cerr << "Error: Expected 5 tensors in the system vector." << std::endl;
         return;
     }
-    setHessianMatrix(torchSystem[0][env]);
-    setGradient(torchSystem[1][env]);
-    setLinearConstraintsMatrix(torchSystem[2][env]);
-    setLowerBound(torchSystem[3][env]);
-    setUpperBound(torchSystem[4][env]);
+    setHessianMatrix(torchSystem[0]);
+    setGradient(torchSystem[1]);
+    setLinearConstraintsMatrix(torchSystem[2]);
+    setLowerBound(torchSystem[3]);
+    setUpperBound(torchSystem[4]);
 }
 
 
