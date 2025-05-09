@@ -10,8 +10,8 @@
 using namespace casadi;
 using namespace std::chrono;
 
-SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict &nlp, ::casadi::Dict &options)
-        : verbose_(false) {  // 初始化verbose_为false
+SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict &nlp, ::casadi::Dict &options, int numSolvers)
+        : numSolvers_(numSolvers > 0 ? numSolvers : 1), verbose_(false) {
     // 加载SQP参数
     stepNum_ = options.at("max_iter").as_int();
     alpha_ = options.at("alpha").as_double();
@@ -76,54 +76,67 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict &nlp, ::casadi::Di
                                     {hessian, gradient, linearizedIneqConstraints[0],
                                      l_linearized, u_linearized});
 
-    // 配置QP求解器
-    qpSolver_.setDimension(augmentedVariables.size1(), augmentedConstraints.size1());
-    qpSolver_.setVerbosity(false);
-    qpSolver_.setWarmStart(true);
-    qpSolver_.setAbsoluteTolerance(1e-3);
-    qpSolver_.setRelativeTolerance(1e-3);
-    qpSolver_.setMaxIteration(10000);
+    // 初始化多个求解器实例
+    qpSolvers_.resize(numSolvers_);
+    solvers_.resize(numSolvers_);
+    results_.resize(numSolvers_);
+    resultsTensor_.resize(numSolvers_);
 
-    // 初始化结果字典
-    result_ = {
-            {"x", DM::zeros(variables.size1())},
-            {"f", DM::zeros(1)}
-    };
+    for (int i = 0; i < numSolvers_; ++i) {
+        // 配置QP求解器
+        qpSolvers_[i].setDimension(augmentedVariables.size1(), augmentedConstraints.size1());
+        qpSolvers_[i].setVerbosity(false);
+        qpSolvers_[i].setWarmStart(true);
+        qpSolvers_[i].setAbsoluteTolerance(1e-3);
+        qpSolvers_[i].setRelativeTolerance(1e-3);
+        qpSolvers_[i].setMaxIteration(10000);
 
-    // 初始化Tensor结果字典
-    resultTensor_ = {
-            {"x", torch::zeros({static_cast<int64_t>(variables.size1()), 1})},
-            {"f", torch::zeros({1, 1})}
-    };
+        // 初始化结果字典
+        results_[i] = {
+                {"x", DM::zeros(variables.size1())},
+                {"f", DM::zeros(1)}
+        };
+
+        // 初始化Tensor结果字典
+        resultsTensor_[i] = {
+                {"x", torch::zeros({static_cast<int64_t>(variables.size1()), 1})},
+                {"f", torch::zeros({1, 1})}
+        };
+    }
+
+    // 默认启用CUDA
+    setBackend(true);
 }
 
-
-void SQPOptimizationSolver::loadFromFile(){
+void SQPOptimizationSolver::loadFromFile() {
     // cusadi相关参数
     // 加载localsystemfunction的路径
     functionFilePath_ = ament_index_cpp::get_package_share_directory("optimal_control_problem") +
-            "/code_gen/localSystemFunction.casadi";
+                        "/code_gen/localSystemFunction.casadi";
     N_ENVS = 1;
     fn = casadi::Function::load(functionFilePath_);
-    std::cout<<"Loaded CasADi function: "<<fn.name()<<"\n";
-    solver_ = std::make_unique<CasadiGpuEvaluator>(fn);
+    std::cout << "Loaded CasADi function: " << fn.name() << "\n";
+
+    // 为每个求解器实例加载函数
+    for (int i = 0; i < numSolvers_; ++i) {
+        solvers_[i] = std::make_unique<CasadiGpuEvaluator>(fn);
+    }
+}
+
+casadi::Function SQPOptimizationSolver::getSXLocalSystemFunction() const {
+    return localSystemFunction_;
 }
 
 
-/**
-* @brief 获取局部系统
-* @note 输入的arg保持和原来一致
-* @param arg 输入参数字典
-* @retval 局部系统的DMVector
-*/
-std::vector<torch::Tensor> SQPOptimizationSolver::getLocalSystem(const DMDict &arg) {
+
+std::vector<torch::Tensor> SQPOptimizationSolver::getLocalSystem(const DMDict &arg, int solverIndex) {
     // 获取边界条件
     DM lbx = arg.at("lbx");
     DM ubx = arg.at("ubx");
     DM lbg = arg.at("lbg");
     DM ubg = arg.at("ubg");
     DM p_dm = (arg.find("p") != arg.end()) ? arg.at("p") : DM::zeros(0, 1);
-    DM x_dm = result_.at("x");
+    DM x_dm = results_[solverIndex].at("x");
     DM l_dm = DM::vertcat({p_dm, lbx, lbg});
     DM u_dm = DM::vertcat({p_dm, ubx, ubg});
 
@@ -140,26 +153,21 @@ std::vector<torch::Tensor> SQPOptimizationSolver::getLocalSystem(const DMDict &a
     u_tensor = u_tensor.view({u_dm.size1(), 1});
 
     std::vector<torch::Tensor> inputs = {p_tensor, x_tensor, l_tensor, u_tensor};
-    solver_->compute(inputs);
+    solvers_[solverIndex]->compute(inputs);
     std::vector<torch::Tensor> outTensorVector;
-    outTensorVector.push_back(solver_->getDenseResult(0).cpu());
-    outTensorVector.push_back(solver_->getDenseResult(1).cpu());
-    outTensorVector.push_back(solver_->getDenseResult(2).cpu());
-    outTensorVector.push_back(solver_->getDenseResult(3).cpu());
-    outTensorVector.push_back(solver_->getDenseResult(4).cpu());
+    outTensorVector.push_back(solvers_[solverIndex]->getDenseResult(0).cpu());
+    outTensorVector.push_back(solvers_[solverIndex]->getDenseResult(1).cpu());
+    outTensorVector.push_back(solvers_[solverIndex]->getDenseResult(2).cpu());
+    outTensorVector.push_back(solvers_[solverIndex]->getDenseResult(3).cpu());
+    outTensorVector.push_back(solvers_[solverIndex]->getDenseResult(4).cpu());
     return outTensorVector;
 }
 
-/**
-* @brief SQP求解方法 (CasADi接口)
-* @param arg 输入参数字典
-* @retval 包含最优解和目标函数值的字典
-*/
 DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
+    // 使用第一个求解器处理单个输入
     if (verbose_) {
-        std::cout << "=== SQP优化开始 ===" << std::endl;
+        std::cout << "=== SQP优化开始 (单个实例) ===" << std::endl;
         std::cout << "最大迭代次数: " << stepNum_ << ", 步长因子: " << alpha_ << std::endl;
-
     }
     auto totalStartTime = high_resolution_clock::now();
     double totalQpSolveTime = 0.0;
@@ -172,7 +180,7 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
         }
         // 计算局部系统时间
         auto localSystemStartTime = high_resolution_clock::now();
-        std::vector<torch::Tensor> localSystem = getLocalSystem(arg);
+        std::vector<torch::Tensor> localSystem = getLocalSystem(arg, 0);
         auto localSystemEndTime = high_resolution_clock::now();
         double localSystemTime =
                 duration_cast<microseconds>(localSystemEndTime - localSystemStartTime).count() / 1000.0;
@@ -183,7 +191,7 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
 
         // 计算数据类型转换时间
         auto convertingStartTime = high_resolution_clock::now();
-        qpSolver_.setSystem(localSystem);
+        qpSolvers_[0].setSystem(localSystem);
         auto convertingEndTime = high_resolution_clock::now();
         double convertingTime = duration_cast<microseconds>(convertingEndTime - convertingStartTime).count() / 1000.0;
         totalConvertingTime += convertingTime;
@@ -193,8 +201,8 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
 
         // 设置并求解QP问题
         auto qpStartTime = high_resolution_clock::now();
-        qpSolver_.initSolver();
-        qpSolver_.solve();
+        qpSolvers_[0].initSolver();
+        qpSolvers_[0].solve();
         auto qpEndTime = high_resolution_clock::now();
         double qpSolveTime = duration_cast<microseconds>(qpEndTime - qpStartTime).count() / 1000.0;
         totalQpSolveTime += qpSolveTime;
@@ -202,27 +210,27 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
             std::cout << "  QP求解时间: " << qpSolveTime << " ms" << std::endl;
         }
         // 获取解并更新
-        DM solution = qpSolver_.getSolutionAsDM();
-        DM oldRes = result_.at("x");
+        DM solution = qpSolvers_[0].getSolutionAsDM();
+        DM oldRes = results_[0].at("x");
         // 根据是否存在参考变量p来更新结果
         if (arg.find("p") == arg.end() || arg.at("p").size1() == 0) {
-            result_.at("x") += alpha_ * solution;
+            results_[0].at("x") += alpha_ * solution;
         } else {
             // 从完整解中提取变量部分（排除参考变量p）
             int pSize = arg.at("p").size1();
-            result_.at("x") += alpha_ * solution(Slice(pSize, solution.size1()));
+            results_[0].at("x") += alpha_ * solution(Slice(pSize, solution.size1()));
         }
 
         // 计算并更新目标函数值
         DM p = (arg.find("p") != arg.end()) ? arg.at("p") : DM::zeros(0, 1);
-        result_.at("f") = objectiveFunction_(DMVector{p, result_.at("x")});
+        results_[0].at("f") = objectiveFunction_(DMVector{p, results_[0].at("x")});
 
         if (verbose_) {
-            std::cout << "  当前解: " << result_.at("x") << std::endl;
-            std::cout << "  当前目标函数值: " << result_.at("f") << std::endl;
+            std::cout << "  当前解: " << results_[0].at("x") << std::endl;
+            std::cout << "  当前目标函数值: " << results_[0].at("f") << std::endl;
 
             // 计算并显示解的变化量
-            DM delta = result_.at("x") - oldRes;
+            DM delta = results_[0].at("x") - oldRes;
             double normDelta = norm_2(delta).scalar();
             std::cout << "  解的变化量: " << normDelta << std::endl;
 
@@ -249,54 +257,141 @@ DMDict SQPOptimizationSolver::getOptimalSolution(const DMDict &arg) {
         std::cout << "QP求解总时间: " << totalQpSolveTime << " ms ("
                   << std::fixed << std::setprecision(1) << (totalQpSolveTime / totalTime * 100) << "%)" << std::endl;
         std::cout << "最终结果:" << std::endl;
-        std::cout << "  x = " << result_.at("x") << std::endl;
-        std::cout << "  f = " << result_.at("f") << std::endl;
+        std::cout << "  x = " << results_[0].at("x") << std::endl;
+        std::cout << "  f = " << results_[0].at("f") << std::endl;
     }
 
-    return result_;
-}
-/**
-* @brief 获取局部系统函数
-* @return 局部系统函数
-*/
-casadi::Function SQPOptimizationSolver::getSXLocalSystemFunction() const {
-    return localSystemFunction_;
+    return results_[0];
 }
 
-/**
-* @brief 设置是否输出详细信息
-* @param verbose 是否输出详细信息
-*/
+std::vector<DMDict> SQPOptimizationSolver::getOptimalSolution(const std::vector<DMDict> &args) {
+    std::vector<DMDict> outputResults;
+    int numInputs = static_cast<int>(args.size());
+    if (numInputs > numSolvers_) {
+        std::cerr << "警告: 输入的数量 (" << numInputs << ") 超过求解器数量 (" << numSolvers_
+                  << ")，将仅处理前 " << numSolvers_ << " 个输入。" << std::endl;
+        numInputs = numSolvers_;
+    }
+
+    if (verbose_) {
+        std::cout << "=== SQP优化开始 (多个实例，处理 " << numInputs << " 个输入) ===" << std::endl;
+        std::cout << "最大迭代次数: " << stepNum_ << ", 步长因子: " << alpha_ << std::endl;
+    }
+
+    outputResults.resize(numInputs);
+
+    for (int solverIndex = 0; solverIndex < numInputs; ++solverIndex) {
+        const auto& arg = args[solverIndex];
+        if (verbose_) {
+            std::cout << "\n处理实例 " << solverIndex + 1 << "/" << numInputs << std::endl;
+        }
+
+        auto totalStartTime = high_resolution_clock::now();
+        double totalQpSolveTime = 0.0;
+        double totalLocalSystemTime = 0.0;
+        double totalConvertingTime = 0.0;
+
+        for (int i = 0; i < stepNum_; ++i) {
+            if (verbose_) {
+                std::cout << "  迭代 " << i + 1 << "/" << stepNum_ << std::endl;
+            }
+            // 计算局部系统时间
+            auto localSystemStartTime = high_resolution_clock::now();
+            std::vector<torch::Tensor> localSystem = getLocalSystem(arg, solverIndex);
+            auto localSystemEndTime = high_resolution_clock::now();
+            double localSystemTime =
+                    duration_cast<microseconds>(localSystemEndTime - localSystemStartTime).count() / 1000.0;
+            totalLocalSystemTime += localSystemTime;
+            if (verbose_) {
+                std::cout << "    局部系统计算时间: " << localSystemTime << " ms" << std::endl;
+            }
+
+            // 计算数据类型转换时间
+            auto convertingStartTime = high_resolution_clock::now();
+            qpSolvers_[solverIndex].setSystem(localSystem);
+            auto convertingEndTime = high_resolution_clock::now();
+            double convertingTime = duration_cast<microseconds>(convertingEndTime - convertingStartTime).count() / 1000.0;
+            totalConvertingTime += convertingTime;
+            if (verbose_) {
+                std::cout << "    系统数据类型转换计算时间: " << convertingTime << " ms" << std::endl;
+            }
+
+            // 设置并求解QP问题
+            auto qpStartTime = high_resolution_clock::now();
+            qpSolvers_[solverIndex].initSolver();
+            qpSolvers_[solverIndex].solve();
+            auto qpEndTime = high_resolution_clock::now();
+            double qpSolveTime = duration_cast<microseconds>(qpEndTime - qpStartTime).count() / 1000.0;
+            totalQpSolveTime += qpSolveTime;
+            if (verbose_) {
+                std::cout << "    QP求解时间: " << qpSolveTime << " ms" << std::endl;
+            }
+            // 获取解并更新
+            DM solution = qpSolvers_[solverIndex].getSolutionAsDM();
+            DM oldRes = results_[solverIndex].at("x");
+            // 根据是否存在参考变量p来更新结果
+            if (arg.find("p") == arg.end() || arg.at("p").size1() == 0) {
+                results_[solverIndex].at("x") += alpha_ * solution;
+            } else {
+                // 从完整解中提取变量部分（排除参考变量p）
+                int pSize = arg.at("p").size1();
+                results_[solverIndex].at("x") += alpha_ * solution(Slice(pSize, solution.size1()));
+            }
+
+            // 计算并更新目标函数值
+            DM p = (arg.find("p") != arg.end()) ? arg.at("p") : DM::zeros(0, 1);
+            results_[solverIndex].at("f") = objectiveFunction_(DMVector{p, results_[solverIndex].at("x")});
+
+            if (verbose_) {
+                std::cout << "    当前解: " << results_[solverIndex].at("x") << std::endl;
+                std::cout << "    当前目标函数值: " << results_[solverIndex].at("f") << std::endl;
+
+                // 计算并显示解的变化量
+                DM delta = results_[solverIndex].at("x") - oldRes;
+                double normDelta = norm_2(delta).scalar();
+                std::cout << "    解的变化量: " << normDelta << std::endl;
+
+                // 如果变化很小，可以提前终止
+                if (normDelta < 1e-6) {
+                    std::cout << "    解收敛，提前终止迭代" << std::endl;
+                    break;
+                }
+            }
+        }
+
+        auto totalEndTime = high_resolution_clock::now();
+        double totalTime = duration_cast<microseconds>(totalEndTime - totalStartTime).count() / 1000.0;
+
+        if (verbose_) {
+            std::cout << "\n  === 实例 " << solverIndex + 1 << " 优化完成 ===" << std::endl;
+            std::cout << "  总耗时: " << totalTime << " ms" << std::endl;
+            std::cout << "  局部系统计算总时间: " << totalLocalSystemTime << " ms ("
+                      << std::fixed << std::setprecision(1) << (totalLocalSystemTime / totalTime * 100) << "%)"
+                      << std::endl;
+            std::cout << "  数据类型转换时间: " << totalConvertingTime << " ms ("
+                      << std::fixed << std::setprecision(1) << (totalConvertingTime / totalTime * 100) << "%)"
+                      << std::endl;
+            std::cout << "  QP求解总时间: " << totalQpSolveTime << " ms ("
+                      << std::fixed << std::setprecision(1) << (totalQpSolveTime / totalTime * 100) << "%)" << std::endl;
+            std::cout << "  最终结果:" << std::endl;
+            std::cout << "    x = " << results_[solverIndex].at("x") << std::endl;
+            std::cout << "    f = " << results_[solverIndex].at("f") << std::endl;
+        }
+
+        // 将结果存入输出向量
+        outputResults[solverIndex] = results_[solverIndex];
+    }
+
+    if (verbose_) {
+        std::cout << "\n=== 所有实例优化完成 ===" << std::endl;
+    }
+
+    return outputResults;
+}
+
 void SQPOptimizationSolver::setVerbose(bool verbose) {
     verbose_ = verbose;
-    // 同时设置QP求解器的详细程度
-    qpSolver_.setVerbosity(verbose);
 }
 
-/**
-* @brief 设置计算的backend
-* @param verbose 是否输出详细信息
-*/
-void SQPOptimizationSolver::setBackend(bool useCUDA) {
-    useCUDA_ = useCUDA;
-}
 
-/**
-* @brief 将CasADi DM转换为torch::Tensor
-* @param dm CasADi DM矩阵或向量
-* @return 转换后的torch::Tensor
-*/
-torch::Tensor SQPOptimizationSolver::dmToTensor(const casadi::DM &dm) {
-    // 获取DM的维度
-    int rows = dm.size1();
-    int cols = dm.size2();
-    // 创建torch::Tensor
-    torch::Tensor tensor = torch::zeros({rows, cols}, torch::kFloat32);
-    // 对于稠密矩阵，直接填充所有元素
-    for (int i = 0; i < rows; ++i) {
-        for (int j = 0; j < cols; ++j) {
-            tensor[i][j] = dm(i, j).scalar();
-        }
-    }
-    return tensor;
-}
+

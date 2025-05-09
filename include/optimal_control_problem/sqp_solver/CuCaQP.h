@@ -278,6 +278,9 @@ public:
     CuCaQP();
 
     ~CuCaQP();
+    // 在 CuCaQP.h 中添加
+    CuCaQP(CuCaQP&& other) noexcept;
+    CuCaQP& operator=(CuCaQP&& other) noexcept;
 
     // 设置问题维度
     bool setDimension(int numOfVariables, int numOfConstraints);

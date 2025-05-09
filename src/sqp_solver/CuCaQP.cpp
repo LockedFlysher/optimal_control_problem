@@ -399,3 +399,53 @@ bool CuCaQP::setUpperBound(const Eigen::Matrix<OSQPFloat, Eigen::Dynamic, 1> &u)
     return result;
 }
 
+// 在 CuCaQP.cpp 中实现
+CuCaQP::CuCaQP(CuCaQP&& other) noexcept :
+        numOfVariables_(other.numOfVariables_),
+        numOfConstraints_(other.numOfConstraints_),
+        isInitialized_(other.isInitialized_),
+        upperBound(std::move(other.upperBound)),
+        lowerBound(std::move(other.lowerBound)),
+        gradient(std::move(other.gradient)),
+        hessianMatrix(std::move(other.hessianMatrix)),
+        linearConstraintMatrix(std::move(other.linearConstraintMatrix)),
+        tripletBuffer(std::move(other.tripletBuffer)),
+        solver_(std::move(other.solver_)),
+        verbose_(other.verbose_) {
+
+    // 重置源对象
+    other.numOfVariables_ = 0;
+    other.numOfConstraints_ = 0;
+    other.isInitialized_ = false;
+    other.verbose_ = false;
+}
+
+CuCaQP& CuCaQP::operator=(CuCaQP&& other) noexcept {
+    if (this != &other) {
+        // 清理当前资源
+        if (isInitialized_) {
+            solver_.clearSolver();
+        }
+
+        // 移动资源
+        numOfVariables_ = other.numOfVariables_;
+        numOfConstraints_ = other.numOfConstraints_;
+        isInitialized_ = other.isInitialized_;
+        upperBound = std::move(other.upperBound);
+        lowerBound = std::move(other.lowerBound);
+        gradient = std::move(other.gradient);
+        hessianMatrix = std::move(other.hessianMatrix);
+        linearConstraintMatrix = std::move(other.linearConstraintMatrix);
+        tripletBuffer = std::move(other.tripletBuffer);
+        solver_ = std::move(other.solver_);
+        verbose_ = other.verbose_;
+
+        // 重置源对象
+        other.numOfVariables_ = 0;
+        other.numOfConstraints_ = 0;
+        other.isInitialized_ = false;
+        other.verbose_ = false;
+    }
+    return *this;
+}
+
