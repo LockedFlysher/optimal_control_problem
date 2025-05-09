@@ -106,6 +106,5 @@ private:
      * @return 转换后的torch::Tensor
      */
     torch::Tensor dmToTensor(const ::casadi::DM &dm);
-
     void setBackend(bool b);
 };

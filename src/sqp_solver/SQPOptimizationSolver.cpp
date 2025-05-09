@@ -105,7 +105,7 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict &nlp, ::casadi::Di
     }
 
     // 默认启用CUDA
-    setBackend(true);
+//    setBackend(true);
 }
 
 void SQPOptimizationSolver::loadFromFile() {
@@ -394,4 +394,28 @@ void SQPOptimizationSolver::setVerbose(bool verbose) {
 }
 
 
+/**
+* @brief 将CasADi DM转换为torch::Tensor
+* @param dm CasADi DM矩阵或向量
+* @return 转换后的torch::Tensor
+*/
+torch::Tensor SQPOptimizationSolver::dmToTensor(const casadi::DM &dm) {
+    // 获取DM的维度
+    int rows = dm.size1();
+    int cols = dm.size2();
+    // 创建torch::Tensor
+    torch::Tensor tensor = torch::zeros({rows, cols}, torch::kFloat32);
+    // 对于稠密矩阵，直接填充所有元素
+    for (int i = 0; i < rows; ++i) {
+        for (int j = 0; j < cols; ++j) {
+            tensor[i][j] = dm(i, j).scalar();
+        }
+    }
+    return tensor;
+}
+
+
+void SQPOptimizationSolver::setBackend(bool useCUDA) {
+    this->useCUDA_ = useCUDA;
+}
 
