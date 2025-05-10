@@ -63,66 +63,36 @@ OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
     printSummary();
 }
 
-void OptimalControlProblem::setMaxSolverCount(int count) {
-    if (count <= 0) {
-        throw std::invalid_argument("Solver count must be positive");
-    }
-
-    std::lock_guard<std::mutex> lock(solverMutex_);
-    maxSolverCount_ = count;
-    solverStates_.resize(count, SolverState::IDLE);
-    optimalTrajectories_.resize(count);
-}
-
-OptimalControlProblem::SolverState OptimalControlProblem::getSolverState(int solverId) {
-    std::lock_guard<std::mutex> lock(solverMutex_);
-    if (solverId < 0 || solverId >= solverStates_.size()) {
-        throw std::out_of_range("Invalid solver ID: " + std::to_string(solverId));
-    }
-    return solverStates_[solverId];
-}
-
-bool OptimalControlProblem::validateConfig(const YAML::Node &config) {
-    if (!config["solver_settings"]) return false;
-    const auto &solver = config["solver_settings"];
-
-    return solver["max_iter"] && solver["warm_start"] &&
-           solver["SQP_settings"] && solver["SQP_settings"]["alpha"] &&
-           solver["SQP_settings"]["step_num"] && solver["verbose"] &&
-           solver["gen_code"] && solver["load_lib"] && solver["solve_method"];
-}
-
-bool OptimalControlProblem::checkDirectoryPermissions(const std::string &path) {
-    try {
-        std::filesystem::path dir_path(path);
-        if (!std::filesystem::exists(dir_path)) {
-            return std::filesystem::create_directories(dir_path);
+// 我在此修改：添加析构函数实现
+OptimalControlProblem::~OptimalControlProblem() {
+    // 等待所有求解线程完成
+    for (auto& thread : solverThreads_) {
+        if (thread.joinable()) {
+            thread.join();
         }
-        // Check write permissions
-        return access(path.c_str(), W_OK) == 0;
-    } catch (const std::filesystem::filesystem_error &e) {
-        return false;
     }
 }
 
-
-void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, const ::casadi::DM &reference, int solverId) {
-    // 检查求解器ID是否有效
+// 我在此修改：添加设置求解器状态的辅助函数
+void OptimalControlProblem::setSolverState(int solverId, SolverState state, const std::string& errorMsg) {
     {
         std::lock_guard<std::mutex> lock(solverMutex_);
         if (solverId < 0 || solverId >= solverStates_.size()) {
-            throw std::out_of_range("Invalid solver ID: " + std::to_string(solverId));
+            return;
         }
+        solverStates_[solverId] = state;
 
-        // 检查求解器是否空闲
-        if (solverStates_[solverId] == SolverState::BUSY) {
-            throw std::runtime_error("Solver " + std::to_string(solverId) + " is already busy");
+        // 如果有错误消息，保存它
+        if (!errorMsg.empty() && solverId < errorMessages_.size()) {
+            errorMessages_[solverId] = errorMsg;
         }
-
-        // 标记求解器为忙碌状态
-        solverStates_[solverId] = SolverState::BUSY;
     }
+    // 通知等待的线程状态已更改
+    stateChangeCV_.notify_all();
+}
 
+// 我在此修改：添加异步求解的内部实现函数
+void OptimalControlProblem::solveTrajectoryAsync(const casadi::DM &frame, const casadi::DM &reference, int solverId) {
     try {
         if (frame.size1() != OCPConfigPtr_->getFrameSize()) {
             throw std::invalid_argument("State dimension mismatch: received " +
@@ -169,9 +139,8 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
         arg["p"] = reference;
 
         if (!solverInputCheck(arg)) {
-            std::lock_guard<std::mutex> lock(solverMutex_);
-            solverStates_[solverId] = SolverState::FAILED;
-            throw std::runtime_error("Solver input validation failed");
+            setSolverState(solverId, SolverState::FAILED, "Solver input validation failed");
+            return;
         }
 
         // 首次调用时初始化求解器
@@ -228,23 +197,168 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
         }
 
         if (res.empty()) {
-            std::lock_guard<std::mutex> lock(solverMutex_);
-            solverStates_[solverId] = SolverState::FAILED;
-            throw std::runtime_error("Solver returned empty result");
+            setSolverState(solverId, SolverState::FAILED, "Solver returned empty result");
+            return;
         }
 
         // 更新特定求解器的最优轨迹
         {
             std::lock_guard<std::mutex> lock(solverMutex_);
             optimalTrajectories_[solverId] = res.at("x");
-            solverStates_[solverId] = SolverState::COMPLETED;
+            setSolverState(solverId, SolverState::COMPLETED);
         }
     } catch (const std::exception &e) {
-        std::lock_guard<std::mutex> lock(solverMutex_);
-        solverStates_[solverId] = SolverState::FAILED;
-        throw; // 重新抛出异常
+        setSolverState(solverId, SolverState::FAILED, e.what());
     }
 }
+
+void OptimalControlProblem::setMaxSolverCount(int count) {
+    if (count <= 0) {
+        throw std::invalid_argument("Solver count must be positive");
+    }
+
+    std::lock_guard<std::mutex> lock(solverMutex_);
+    maxSolverCount_ = count;
+    solverStates_.resize(count, SolverState::IDLE);
+    optimalTrajectories_.resize(count);
+}
+
+OptimalControlProblem::SolverState OptimalControlProblem::getSolverState(int solverId) {
+    std::lock_guard<std::mutex> lock(solverMutex_);
+    if (solverId < 0 || solverId >= solverStates_.size()) {
+        throw std::out_of_range("Invalid solver ID: " + std::to_string(solverId));
+    }
+    return solverStates_[solverId];
+}
+
+bool OptimalControlProblem::validateConfig(const YAML::Node &config) {
+    if (!config["solver_settings"]) return false;
+    const auto &solver = config["solver_settings"];
+
+    return solver["max_iter"] && solver["warm_start"] &&
+           solver["SQP_settings"] && solver["SQP_settings"]["alpha"] &&
+           solver["SQP_settings"]["step_num"] && solver["verbose"] &&
+           solver["gen_code"] && solver["load_lib"] && solver["solve_method"];
+}
+
+bool OptimalControlProblem::checkDirectoryPermissions(const std::string &path) {
+    try {
+        std::filesystem::path dir_path(path);
+        if (!std::filesystem::exists(dir_path)) {
+            return std::filesystem::create_directories(dir_path);
+        }
+        // Check write permissions
+        return access(path.c_str(), W_OK) == 0;
+    } catch (const std::filesystem::filesystem_error &e) {
+        return false;
+    }
+}
+
+
+// 我在此修改：修改计算最优轨迹的函数实现为同步版本
+void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, const ::casadi::DM &reference, int solverId) {
+    // 检查求解器ID是否有效
+    {
+        std::lock_guard<std::mutex> lock(solverMutex_);
+        if (solverId < 0 || solverId >= solverStates_.size()) {
+            throw std::out_of_range("Invalid solver ID: " + std::to_string(solverId));
+        }
+
+        // 检查求解器是否空闲
+        if (solverStates_[solverId] == SolverState::BUSY) {
+            throw std::runtime_error("Solver " + std::to_string(solverId) + " is already busy");
+        }
+
+        // 标记求解器为忙碌状态
+        solverStates_[solverId] = SolverState::BUSY;
+    }
+
+    // 直接调用异步求解函数的内部实现
+    solveTrajectoryAsync(frame, reference, solverId);
+}
+
+// 我在此修改：添加等待求解完成的函数实现
+bool OptimalControlProblem::waitForSolver(int solverId, int timeoutMs) {
+    if (solverId < 0 || solverId >= solverStates_.size()) {
+        throw std::out_of_range("Invalid solver ID: " + std::to_string(solverId));
+    }
+
+    std::unique_lock<std::mutex> lock(solverMutex_);
+
+    // 如果已经完成或失败，直接返回
+    if (solverStates_[solverId] == SolverState::COMPLETED ||
+        solverStates_[solverId] == SolverState::FAILED) {
+        return true;
+    }
+
+    if (timeoutMs < 0) {
+        // 无限等待直到状态改变
+        stateChangeCV_.wait(lock, [this, solverId]() {
+            return solverStates_[solverId] == SolverState::COMPLETED ||
+                   solverStates_[solverId] == SolverState::FAILED;
+        });
+        return true;
+    } else {
+        // 有超时限制的等待
+        auto result = stateChangeCV_.wait_for(lock, std::chrono::milliseconds(timeoutMs), [this, solverId]() {
+            return solverStates_[solverId] == SolverState::COMPLETED ||
+                   solverStates_[solverId] == SolverState::FAILED;
+        });
+        return result;
+    }
+}
+
+// 我在此修改：添加获取错误信息的函数实现
+std::string OptimalControlProblem::getSolverErrorMessage(int solverId) {
+    std::lock_guard<std::mutex> lock(solverMutex_);
+    if (solverId < 0 || solverId >= errorMessages_.size()) {
+        return "Invalid solver ID";
+    }
+    return errorMessages_[solverId];
+}
+
+// 我在此修改：添加异步计算最优轨迹的函数实现
+void OptimalControlProblem::computeOptimalTrajectoryAsync(const casadi::DM &frame, const casadi::DM &reference, int solverId) {
+    // 检查求解器ID是否有效
+    {
+        std::lock_guard<std::mutex> lock(solverMutex_);
+        if (solverId < 0 || solverId >= solverStates_.size()) {
+            throw std::out_of_range("Invalid solver ID: " + std::to_string(solverId));
+        }
+
+        // 检查求解器是否空闲
+        if (solverStates_[solverId] == SolverState::BUSY) {
+            throw std::runtime_error("Solver " + std::to_string(solverId) + " is already busy");
+        }
+
+        // 确保错误消息数组大小与求解器数量一致
+        if (errorMessages_.size() < solverStates_.size()) {
+            errorMessages_.resize(solverStates_.size());
+        }
+
+        // 标记求解器为忙碌状态
+        solverStates_[solverId] = SolverState::BUSY;
+        errorMessages_[solverId].clear();
+    }
+
+    // 创建新线程执行求解任务
+    std::thread solverThread(&OptimalControlProblem::solveTrajectoryAsync, this, frame, reference, solverId);
+
+    // 管理线程
+    if (solverId >= solverThreads_.size()) {
+        solverThreads_.resize(solverId + 1);
+    }
+
+    // 如果之前有线程，确保它已经完成
+    if (solverThreads_[solverId].joinable()) {
+        solverThreads_[solverId].join();
+    }
+
+    // 将新线程移动到管理数组中
+    solverThreads_[solverId] = std::move(solverThread);
+}
+
+
 void OptimalControlProblem::genSolver() {
     if (solverSettings.verbose) {
         std::cout << "\n=============== Generating Solver ===============" << std::endl;

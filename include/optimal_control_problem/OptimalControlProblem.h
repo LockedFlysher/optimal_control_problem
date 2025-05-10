@@ -11,6 +11,9 @@
 #include "optimal_control_problem/OCP_config/OCPConfig.h"
 #include <mutex>
 #include <atomic>
+#include <thread> // 我在此修改：添加线程支持
+#include <future> // 我在此修改：添加future支持
+#include <condition_variable> // 我在此修改：添加条件变量支持
 
 class OptimalControlProblem {
 private:
@@ -71,10 +74,20 @@ private:
     std::mutex solverMutex_;
     std::atomic<int> maxSolverCount_{1}; // 默认为1个求解器
 
+    // 我在此修改：添加线程管理相关成员
+    std::vector<std::thread> solverThreads_;
+    std::vector<std::future<void>> solverFutures_;
+    std::vector<std::string> errorMessages_;
+    std::condition_variable stateChangeCV_;
+
     // 新增：检查YAML配置是否有效
     bool validateConfig(const YAML::Node& config);
     // 新增：检查目录权限
     bool checkDirectoryPermissions(const std::string& path);
+
+    // 我在此修改：添加异步求解的内部辅助函数
+    void solveTrajectoryAsync(const casadi::DM &frame, const casadi::DM &reference, int solverId);
+    void setSolverState(int solverId, SolverState state, const std::string& errorMsg = "");
 
     void printSummary() const;
 
@@ -95,11 +108,20 @@ public:
 
     void genSolver();
 
+    // 我在此修改：修改计算最优轨迹的函数声明
     void computeOptimalTrajectory(const casadi::DM &frame, const casadi::DM &reference, int solverId = 0);
+    // 我在此修改：添加异步计算最优轨迹的函数声明
+    void computeOptimalTrajectoryAsync(const casadi::DM &frame, const casadi::DM &reference, int solverId = 0);
+    // 我在此修改：添加等待求解完成的函数声明
+    bool waitForSolver(int solverId, int timeoutMs = -1);
+    // 我在此修改：添加获取错误信息的函数声明
+    std::string getSolverErrorMessage(int solverId);
 
     void setReference(const casadi::SX& reference);
 
     explicit OptimalControlProblem(YAML::Node);
+    // 我在此修改：添加析构函数声明
+    ~OptimalControlProblem();
 
     void addScalarCost(const casadi::SX &cost);
     void addVectorCost(const casadi::DM &numericParam, const casadi::SX &symbolicTerm);
