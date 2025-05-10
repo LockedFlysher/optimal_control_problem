@@ -58,7 +58,6 @@ def generateCMakeLists(casadi_fns):
     # * Write codegen to file
     for cmake_str in cmake_strings.values():
         cmake_file.write(cmake_str)
-        print(cmake_str)
 
 def generateCUDACodeDouble(f, filepath=None, benchmarking=True, debug_mode=True):
     print("Generating CUDA code for CasADi function: ", f.name())
