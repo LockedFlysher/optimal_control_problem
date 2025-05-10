@@ -2,7 +2,7 @@
 // Created by lock on 25-4-28.
 // Updated by Monica on 25-5-8 to remove multi-instance support, rename APIs, and add CPU support.
 //
-#include "optimal_control_problem/cusadi_function/CasadiGpuEvaluator.h"
+#include "optimal_control_problem/sqp_solver/CasadiGpuEvaluator.h"
 #include <iostream>
 #include <cuda_runtime.h>  // 用于 cudaDeviceSynchronize 等 CUDA 运行时函数
 #include <sstream>  // 用于构建详细的错误信息

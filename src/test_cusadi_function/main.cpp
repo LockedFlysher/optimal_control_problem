@@ -1,5 +1,4 @@
-#include "optimal_control_problem/cusadi_function/CasadiGpuEvaluator.h"
-//一定要先casadi再torch，// 否则会报错
+#include "optimal_control_problem/sqp_solver/CasadiGpuEvaluator.h"
 #include <casadi/casadi.hpp>
 #include <torch/torch.h>
 #include <iostream>
@@ -31,7 +30,6 @@ int main() {
     for (int i = 0; i < fn.n_out(); ++i) {
         auto D = solver.getDenseResult(i);
         std::cout<<"Output "<<i<<" =\n"<<D<<std::endl;
-        // std::cout<<"Output "<<i<<" =\n"<<D.cpu()<<std::endl;
     }
     return 0;
 }

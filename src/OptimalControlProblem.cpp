@@ -223,25 +223,45 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
 }
 
 void OptimalControlProblem::genSolver() {
+    if (solverSettings.verbose) {
+        std::cout << "\n=============== Generating Solver ===============" << std::endl;
+    }
+
+    // Get optimization variables
     ::casadi::SX vars = OCPConfigPtr_->getVariables();
     if (vars.is_empty()) {
         throw std::runtime_error("Status or input variables are empty");
     }
 
+    // Get cost function
+    ::casadi::SX costFunction = getCostFunction();
+    if (costFunction.is_empty()) {
+        throw std::runtime_error("Cost function is empty");
+    }
+
+    // Get constraints
     ::casadi::SX constraints = ::casadi::SX::vertcat(this->getConstraints());
     if (constraints.is_empty()) {
         throw std::runtime_error("Constraints are empty");
     }
 
+    if (solverSettings.verbose) {
+        std::cout << "Problem dimensions:" << std::endl;
+        std::cout << "  Variables: " << vars.size1() << " x " << vars.size2() << std::endl;
+        std::cout << "  Constraints: " << constraints.size1() << " x " << constraints.size2() << std::endl;
+        std::cout << "  Reference parameters: " << reference_.size1() << " x " << reference_.size2() << std::endl;
+    }
+
+    // Create the NLP problem dictionary
     ::casadi::SXDict nlp = {
             {"x", vars},
-            {"f", getCostFunction()},
+            {"f", costFunction},
             {"g", constraints},
             {"p", reference_}
     };
 
     ::casadi::Dict basicOptions;
-    basicOptions["verbose"] = solverSettings.verbose ? 1 : 0;
+//    basicOptions["verbose"] = solverSettings.verbose ? 1 : 0;
     basicOptions["jit"] = false;  // Temporarily disable JIT to avoid conflicts during code generation
 
     // Get the absolute path of the current working directory

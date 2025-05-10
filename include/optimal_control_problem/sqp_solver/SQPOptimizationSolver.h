@@ -5,7 +5,7 @@
 #include <memory>
 #include <chrono> // 添加计时功能
 #include "optimal_control_problem/sqp_solver/AutoDifferentiator.h"
-#include "optimal_control_problem/cusadi_function/CasadiGpuEvaluator.h"
+#include "optimal_control_problem/sqp_solver/CasadiGpuEvaluator.h"
 #include "optimal_control_problem/sqp_solver/CuCaQP.h"
 #include <torch/script.h>
 #include <vector>
