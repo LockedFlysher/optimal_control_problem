@@ -47,8 +47,10 @@ OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
         }
 
         if (solverSettings.verbose) {
-            std::cout << "Code generation and dynamic library compilation: " << (solverSettings.genCode ? "Enabled" : "Disabled") << std::endl;
-            std::cout << "Dynamic library loading for solver: " << (solverSettings.loadLib ? "Enabled" : "Disabled") << std::endl;
+            std::cout << "Code generation and dynamic library compilation: "
+                      << (solverSettings.genCode ? "Enabled" : "Disabled") << std::endl;
+            std::cout << "Dynamic library loading for solver: " << (solverSettings.loadLib ? "Enabled" : "Disabled")
+                      << std::endl;
         }
     } catch (const YAML::Exception &e) {
         throw std::runtime_error("Error parsing YAML configuration: " + std::string(e.what()));
@@ -427,14 +429,14 @@ void OptimalControlProblem::genSolver() {
                         if (!OSQPSolverPtr_) {
                             throw std::runtime_error("OSQP Solver pointer is null");
                         }
-
                         // Get local system function
                         casadi::Function localSystemFunction;
                         try {
                             localSystemFunction = OSQPSolverPtr_->getSXLocalSystemFunction();
-                        } catch (const std::out_of_range& e) {
-                            throw std::runtime_error("Failed to generate solver: map::at - Key not found in internal map");
-                        } catch (const std::exception& e) {
+                        } catch (const std::out_of_range &e) {
+                            throw std::runtime_error(
+                                    "Failed to generate solver: map::at - Key not found in internal map");
+                        } catch (const std::exception &e) {
                             throw std::runtime_error("Failed to get local system function: " + std::string(e.what()));
                         }
 
@@ -453,7 +455,7 @@ void OptimalControlProblem::genSolver() {
                         // Save temporary file
                         try {
                             localSystemFunction.save(temp_file.string());
-                        } catch (const std::exception& e) {
+                        } catch (const std::exception &e) {
                             throw std::runtime_error("Failed to save LocalSystemFunction: " + std::string(e.what()));
                         }
 
@@ -473,7 +475,7 @@ void OptimalControlProblem::genSolver() {
                         try {
                             std::filesystem::copy_file(temp_file, target_file,
                                                        std::filesystem::copy_options::overwrite_existing);
-                        } catch (const std::filesystem::filesystem_error& e) {
+                        } catch (const std::filesystem::filesystem_error &e) {
                             throw std::runtime_error("Failed to copy file from " + temp_file.string() +
                                                      " to " + target_file.string() + ": " + e.what());
                         }
@@ -481,7 +483,7 @@ void OptimalControlProblem::genSolver() {
                         // Delete temporary file
                         try {
                             std::filesystem::remove(temp_file);
-                        } catch (const std::filesystem::filesystem_error& e) {
+                        } catch (const std::filesystem::filesystem_error &e) {
                             // Just log a warning, don't terminate the process
                             if (solverSettings.verbose) {
                                 std::cout << "Warning: Failed to remove temporary file: " << e.what() << std::endl;
@@ -493,7 +495,8 @@ void OptimalControlProblem::genSolver() {
                         }
 
                         // Set CUSADi function path
-                        const std::string cusadi_function_path = packagePath_ + "/cusadi/src/casadi_functions/localSystemFunction.casadi";
+                        const std::string cusadi_function_path =
+                                packagePath_ + "/cusadi/src/casadi_functions/localSystemFunction.casadi";
 
                         // Check if CUSADi directory exists
                         std::filesystem::path cusadi_dir = std::filesystem::path(cusadi_function_path).parent_path();
@@ -507,7 +510,7 @@ void OptimalControlProblem::genSolver() {
                         try {
                             std::filesystem::copy_file(target_file, cusadi_function_path,
                                                        std::filesystem::copy_options::overwrite_existing);
-                        } catch (const std::filesystem::filesystem_error& e) {
+                        } catch (const std::filesystem::filesystem_error &e) {
                             throw std::runtime_error("Failed to copy file from " + target_file.string() +
                                                      " to " + cusadi_function_path + ": " + e.what());
                         }
@@ -526,13 +529,16 @@ void OptimalControlProblem::genSolver() {
                         }
 
                         // Compile with pytorch support
-                        const std::string command = "python3 " + run_codegen_path + " --fn=localSystemFunction --gen_pytorch=True";
-                        std::cout << "Compiling CasADi function to .so for PyTorch acceleration: " << command << std::endl;
+                        const std::string command =
+                                "python3 " + run_codegen_path + " --fn=localSystemFunction --gen_pytorch=True";
+                        std::cout << "Compiling CasADi function to .so for PyTorch acceleration: " << command
+                                  << std::endl;
 
                         // Execute command and check result
                         int result = std::system(command.c_str());
                         if (result != 0) {
-                            std::string error_msg = "Failed to run script (run_codegen.py), exit code: " + std::to_string(result);
+                            std::string error_msg =
+                                    "Failed to run script (run_codegen.py), exit code: " + std::to_string(result);
                             OCP_ERROR(error_msg);
                             throw std::runtime_error(error_msg);
                         }
@@ -540,28 +546,31 @@ void OptimalControlProblem::genSolver() {
                         // Check if output file exists
                         std::string output_lib = packagePath_ + "/cusadi/build/liblocalSystemFunction.so";
                         if (!std::filesystem::exists(output_lib)) {
-                            throw std::runtime_error("Code generation completed but library file not found: " + output_lib);
+                            throw std::runtime_error(
+                                    "Code generation completed but library file not found: " + output_lib);
                         }
 
                         if (solverSettings.verbose) {
-                            std::cout << "LocalSystemFunction successfully generated CUDA code: " << output_lib << std::endl;
+                            std::cout << "LocalSystemFunction successfully generated CUDA code: " << output_lib
+                                      << std::endl;
                         }
 
-                    } catch (const std::out_of_range& e) {
+                    } catch (const std::out_of_range &e) {
                         std::string error_msg = "Failed to generate solver: map::at - Key not found in internal map";
                         OCP_ERROR(error_msg);
                         throw std::runtime_error(error_msg);
-                    } catch (const std::exception& e) {
+                    } catch (const std::exception &e) {
                         std::string error_msg = "Code generation failed: " + std::string(e.what());
                         OCP_ERROR(error_msg);
                         throw std::runtime_error(error_msg);
                     }
-
+                    OSQPSolverPtr_->loadFromFile();
                     break;
                 }
+                if (solverSettings.loadLib) {
+                    OSQPSolverPtr_->loadFromFile();
+                }
 
-
-                OSQPSolverPtr_->loadFromFile();
             }
                 if (solverSettings.verbose) {
                     const auto num_vars = vars.size1();
