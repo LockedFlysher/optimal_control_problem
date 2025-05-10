@@ -13,10 +13,38 @@ using namespace std::chrono;
 SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict &nlp, ::casadi::Dict &options, int numSolvers)
         : numSolvers_(numSolvers > 0 ? numSolvers : 1), verbose_(false) {
     // 加载SQP参数
-    stepNum_ = options.at("max_iter").as_int();
-    alpha_ = options.at("alpha").as_double();
-    setVerbose(options.at("verbose"));
-    // 必需参数检查
+    // 设置默认值
+    int defaultMaxIter = 10;
+    double defaultAlpha = 0.2;
+    bool defaultVerbose = true;
+
+// 尝试获取选项，如果不存在则使用默认值
+    try {
+        stepNum_ = options.find("max_iter") != options.end() ?
+                   options.at("max_iter").as_int() : defaultMaxIter;
+    } catch (const std::exception& e) {
+        // 如果类型转换失败，使用默认值
+        stepNum_ = defaultMaxIter;
+    }
+
+    try {
+        alpha_ = options.find("alpha") != options.end() ?
+                 options.at("alpha").as_double() : defaultAlpha;
+    } catch (const std::exception& e) {
+        // 如果类型转换失败，使用默认值
+        alpha_ = defaultAlpha;
+    }
+
+    try {
+        bool verbose = options.find("verbose") != options.end() ?
+                       options.at("verbose").as_bool() : defaultVerbose;
+        setVerbose(verbose);
+    } catch (const std::exception& e) {
+        // 如果类型转换失败，使用默认值
+        setVerbose(defaultVerbose);
+    }
+
+// 必需参数检查
     if (nlp.find("f") == nlp.end()) {
         throw std::invalid_argument("目标函数'f'未定义");
     }
@@ -27,7 +55,7 @@ SQPOptimizationSolver::SQPOptimizationSolver(::casadi::SXDict &nlp, ::casadi::Di
     }
     auto variables = nlp["x"];
 
-    // 可选参数处理
+// 可选参数处理
     SX constraints;
     if (nlp.find("g") != nlp.end()) {
         constraints = nlp["g"];

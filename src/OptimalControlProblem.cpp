@@ -422,52 +422,145 @@ void OptimalControlProblem::genSolver() {
                 OSQPSolverPtr_ = std::make_shared<SQPOptimizationSolver>(nlp, sqp_options);
 
                 if (solverSettings.genCode) {
-                    casadi::Function localSystemFunction = OSQPSolverPtr_->getSXLocalSystemFunction();
-                    std::filesystem::path temp_file = current_path / "localSystemFunction_temp.casadi";
-                    std::filesystem::path target_file = code_dir_abs / "localSystemFunction.casadi";
+                    try {
+                        // Check if OSQPSolverPtr_ is valid
+                        if (!OSQPSolverPtr_) {
+                            throw std::runtime_error("OSQP Solver pointer is null");
+                        }
 
-                    if (solverSettings.verbose) {
-                        std::cout << "Saving LocalSystemFunction at: " << temp_file << std::endl;
+                        // Get local system function
+                        casadi::Function localSystemFunction;
+                        try {
+                            localSystemFunction = OSQPSolverPtr_->getSXLocalSystemFunction();
+                        } catch (const std::out_of_range& e) {
+                            throw std::runtime_error("Failed to generate solver: map::at - Key not found in internal map");
+                        } catch (const std::exception& e) {
+                            throw std::runtime_error("Failed to get local system function: " + std::string(e.what()));
+                        }
+
+                        if (localSystemFunction.is_null()) {
+                            throw std::runtime_error("Failed to get local system function: Function is null");
+                        }
+
+                        // Set file paths
+                        std::filesystem::path temp_file = current_path / "localSystemFunction_temp.casadi";
+                        std::filesystem::path target_file = code_dir_abs / "localSystemFunction.casadi";
+
+                        if (solverSettings.verbose) {
+                            std::cout << "Saving LocalSystemFunction at: " << temp_file << std::endl;
+                        }
+
+                        // Save temporary file
+                        try {
+                            localSystemFunction.save(temp_file.string());
+                        } catch (const std::exception& e) {
+                            throw std::runtime_error("Failed to save LocalSystemFunction: " + std::string(e.what()));
+                        }
+
+                        // Verify temporary file was created successfully
+                        if (!std::filesystem::exists(temp_file)) {
+                            throw std::runtime_error("Failed to save LocalSystemFunction at: " + temp_file.string());
+                        }
+
+                        // Check if target directory exists, create if not
+                        if (!std::filesystem::exists(code_dir_abs)) {
+                            if (!std::filesystem::create_directories(code_dir_abs)) {
+                                throw std::runtime_error("Failed to create directory: " + code_dir_abs.string());
+                            }
+                        }
+
+                        // Copy file to target location
+                        try {
+                            std::filesystem::copy_file(temp_file, target_file,
+                                                       std::filesystem::copy_options::overwrite_existing);
+                        } catch (const std::filesystem::filesystem_error& e) {
+                            throw std::runtime_error("Failed to copy file from " + temp_file.string() +
+                                                     " to " + target_file.string() + ": " + e.what());
+                        }
+
+                        // Delete temporary file
+                        try {
+                            std::filesystem::remove(temp_file);
+                        } catch (const std::filesystem::filesystem_error& e) {
+                            // Just log a warning, don't terminate the process
+                            if (solverSettings.verbose) {
+                                std::cout << "Warning: Failed to remove temporary file: " << e.what() << std::endl;
+                            }
+                        }
+
+                        if (solverSettings.verbose) {
+                            std::cout << "LocalSystemFunction saved successfully to: " << target_file << std::endl;
+                        }
+
+                        // Set CUSADi function path
+                        const std::string cusadi_function_path = packagePath_ + "/cusadi/src/casadi_functions/localSystemFunction.casadi";
+
+                        // Check if CUSADi directory exists
+                        std::filesystem::path cusadi_dir = std::filesystem::path(cusadi_function_path).parent_path();
+                        if (!std::filesystem::exists(cusadi_dir)) {
+                            if (!std::filesystem::create_directories(cusadi_dir)) {
+                                throw std::runtime_error("Failed to create directory: " + cusadi_dir.string());
+                            }
+                        }
+
+                        // Copy file to CUSADi directory
+                        try {
+                            std::filesystem::copy_file(target_file, cusadi_function_path,
+                                                       std::filesystem::copy_options::overwrite_existing);
+                        } catch (const std::filesystem::filesystem_error& e) {
+                            throw std::runtime_error("Failed to copy file from " + target_file.string() +
+                                                     " to " + cusadi_function_path + ": " + e.what());
+                        }
+
+                        // Verify file was copied successfully
+                        if (!std::filesystem::exists(cusadi_function_path)) {
+                            throw std::runtime_error("Failed to copy LocalSystemFunction to: " + cusadi_function_path);
+                        }
+
+                        // Set path to run_codegen.py script
+                        const std::string run_codegen_path = packagePath_ + "/cusadi/run_codegen.py";
+
+                        // Check if script exists
+                        if (!std::filesystem::exists(run_codegen_path)) {
+                            throw std::runtime_error("Code generation script not found: " + run_codegen_path);
+                        }
+
+                        // Compile with pytorch support
+                        const std::string command = "python3 " + run_codegen_path + " --fn=localSystemFunction --gen_pytorch=True";
+                        std::cout << "Compiling CasADi function to .so for PyTorch acceleration: " << command << std::endl;
+
+                        // Execute command and check result
+                        int result = std::system(command.c_str());
+                        if (result != 0) {
+                            std::string error_msg = "Failed to run script (run_codegen.py), exit code: " + std::to_string(result);
+                            OCP_ERROR(error_msg);
+                            throw std::runtime_error(error_msg);
+                        }
+
+                        // Check if output file exists
+                        std::string output_lib = packagePath_ + "/cusadi/build/liblocalSystemFunction.so";
+                        if (!std::filesystem::exists(output_lib)) {
+                            throw std::runtime_error("Code generation completed but library file not found: " + output_lib);
+                        }
+
+                        if (solverSettings.verbose) {
+                            std::cout << "LocalSystemFunction successfully generated CUDA code: " << output_lib << std::endl;
+                        }
+
+                    } catch (const std::out_of_range& e) {
+                        std::string error_msg = "Failed to generate solver: map::at - Key not found in internal map";
+                        OCP_ERROR(error_msg);
+                        throw std::runtime_error(error_msg);
+                    } catch (const std::exception& e) {
+                        std::string error_msg = "Code generation failed: " + std::string(e.what());
+                        OCP_ERROR(error_msg);
+                        throw std::runtime_error(error_msg);
                     }
 
-                    localSystemFunction.save(temp_file.string());
-
-                    if (!std::filesystem::exists(temp_file)) {
-                        throw std::runtime_error("Failed to save LocalSystemFunction at: " + temp_file.string());
-                    }
-
-                    std::filesystem::copy_file(temp_file, target_file,
-                                               std::filesystem::copy_options::overwrite_existing);
-                    std::filesystem::remove(temp_file);
-
-                    if (solverSettings.verbose) {
-                        std::cout << "LocalSystemFunction saved successfully to: " << target_file << std::endl;
-                    }
-                    const std::string cusadi_function_path =
-                            packagePath_ + "/cusadi/src/casadi_functions/localSystemFunction.casadi";
-                    std::filesystem::copy_file(target_file, cusadi_function_path,
-                                               std::filesystem::copy_options::overwrite_existing);
-                    if (!std::filesystem::exists(cusadi_function_path)) {
-                        throw std::runtime_error(
-                                "Failed to copy LocalSystemFunction from " + target_file.string() + " to: " +
-                                cusadi_function_path);
-                    }
-                    const std::string run_codegen_path = packagePath_ + "/cusadi/run_codegen.py";
-                    // Compile with pytorch support
-                    const std::string command = "python3 " + run_codegen_path + " --fn=localSystemFunction --gen_pytorch=True";
-                    std::cout << "Compiling CasADi function to .so for PyTorch acceleration: " << command << std::endl;
-                    int result = std::system(command.c_str());
-                    // Check command execution result
-                    if (result != 0) {
-                        OCP_ERROR("Failed to run script (run_codegen.py), exit code: " + std::to_string(result));
-                        throw std::runtime_error("Failed to run script (run_codegen.py), exit code: " + std::to_string(result));
-                    }
-                    if (solverSettings.verbose) {
-                        std::cout << "LocalSystemFunction successfully generated CUDA code: "
-                                  << packagePath_ + "/cusadi/build/liblocalSystemFunction.so" << std::endl;
-                    }
                     break;
                 }
+
+
                 OSQPSolverPtr_->loadFromFile();
             }
                 if (solverSettings.verbose) {
