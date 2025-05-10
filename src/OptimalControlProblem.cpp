@@ -617,29 +617,29 @@ void OptimalControlProblem::setReference(const casadi::SX &reference) {
     reference_ = reference;
 }
 
-void OptimalControlProblem::addVectorCost(const casadi::DM &param, const SX &cost) {
-    if (param.size1() != cost.size1()) {
+void OptimalControlProblem::addVectorCost(const casadi::DM &numericParam, const SX &symbolicTerm) {
+    if (numericParam.size1() != symbolicTerm.size1()) {
         OCP_ERROR("Cost symbolic vector and parameter vector dimensions do not match");
         return;
     }
     // Calculate quadratic form scalar cost: cost^T * diag(param) * cost
     SX weightedCost = SX::zeros(1, 1);
-    for (int i = 0; i < cost.size1(); ++i) {
-        weightedCost += param(i).scalar() * cost(i) * cost(i);
+    for (int i = 0; i < symbolicTerm.size1(); ++i) {
+        weightedCost += numericParam(i).scalar() * symbolicTerm(i) * symbolicTerm(i);
     }
     // Add scalar cost to total cost
     addScalarCost(weightedCost);
 }
 
-void OptimalControlProblem::addVectorCost(const std::vector<double> &param, const SX &cost) {
-    if (param.size() != cost.size1()) {
+void OptimalControlProblem::addVectorCost(const std::vector<double> &numericParam, const SX &symbolicTerm) {
+    if (numericParam.size() != symbolicTerm.size1()) {
         OCP_ERROR("Cost symbolic vector and parameter vector dimensions do not match");
         throw std::runtime_error("Vector cost dimensions mismatch");
     }
     // Calculate quadratic form scalar cost: cost^T * diag(param) * cost
     SX weightedCost = SX::zeros(1, 1);
-    for (int i = 0; i < cost.size1(); ++i) {
-        weightedCost += param[i] * cost(i) * cost(i);
+    for (int i = 0; i < symbolicTerm.size1(); ++i) {
+        weightedCost += numericParam[i] * symbolicTerm(i) * symbolicTerm(i);
     }
     // Add scalar cost to total cost
     addScalarCost(weightedCost);

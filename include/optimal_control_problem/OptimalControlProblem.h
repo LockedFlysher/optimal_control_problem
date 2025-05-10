@@ -84,8 +84,8 @@ public:
     explicit OptimalControlProblem(YAML::Node);
 
     void addScalarCost(const casadi::SX &cost);
-    void addVectorCost(const casadi::DM &param,const casadi::SX &cost);
-    void addVectorCost(const std::vector<double> &param, const SX &cost);
+    void addVectorCost(const casadi::DM &numericParam, const casadi::SX &symbolicTerm);
+    void addVectorCost(const std::vector<double> &numericParam, const SX &symbolicTerm);
 
     void addInequalityConstraint(const std::string &constraintName,
                                  const casadi::DM &lowerBound,
