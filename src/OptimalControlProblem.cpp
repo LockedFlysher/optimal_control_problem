@@ -13,6 +13,7 @@
 // Error reporting macro
 #define OCP_ERROR(msg) std::cerr << "[ERROR] " << msg << std::endl
 
+// 修改构造函数，初始化求解器状态
 OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
     try {
         if (!validateConfig(configNode)) {
@@ -46,6 +47,10 @@ OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
             throw std::invalid_argument("Unknown solver type: " + solveMethod);
         }
 
+        maxSolverCount_ = 1;  // 默认为1个求解器
+        solverStates_.resize(maxSolverCount_, SolverState::IDLE);
+        optimalTrajectories_.resize(maxSolverCount_);
+
         if (solverSettings.verbose) {
             std::cout << "Code generation and dynamic library compilation: "
                       << (solverSettings.genCode ? "Enabled" : "Disabled") << std::endl;
@@ -56,6 +61,25 @@ OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
         throw std::runtime_error("Error parsing YAML configuration: " + std::string(e.what()));
     }
     printSummary();
+}
+
+void OptimalControlProblem::setMaxSolverCount(int count) {
+    if (count <= 0) {
+        throw std::invalid_argument("Solver count must be positive");
+    }
+
+    std::lock_guard<std::mutex> lock(solverMutex_);
+    maxSolverCount_ = count;
+    solverStates_.resize(count, SolverState::IDLE);
+    optimalTrajectories_.resize(count);
+}
+
+OptimalControlProblem::SolverState OptimalControlProblem::getSolverState(int solverId) {
+    std::lock_guard<std::mutex> lock(solverMutex_);
+    if (solverId < 0 || solverId >= solverStates_.size()) {
+        throw std::out_of_range("Invalid solver ID: " + std::to_string(solverId));
+    }
+    return solverStates_[solverId];
 }
 
 bool OptimalControlProblem::validateConfig(const YAML::Node &config) {
@@ -82,107 +106,145 @@ bool OptimalControlProblem::checkDirectoryPermissions(const std::string &path) {
 }
 
 
-void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, const ::casadi::DM &reference) {
-    if (frame.size1() != OCPConfigPtr_->getFrameSize()) {
-        throw std::invalid_argument("State dimension mismatch: received " +
-                                    std::to_string(frame.size1()) +
-                                    ", expected " +
-                                    std::to_string(OCPConfigPtr_->getFrameSize()));
-    }
-    if (reference.size1() != reference_.size1()) {
-        throw std::invalid_argument("Reference dimension mismatch: received " +
-                                    std::to_string(reference.size1()) +
-                                    ", expected " +
-                                    std::to_string(reference_.size1()));
-    }
-
-    std::map<std::string, ::casadi::DM> arg, res;
-    ::casadi::DM lbx = ::casadi::DM::vertcat(OCPConfigPtr_->getLowerBounds());
-    ::casadi::DM ubx = ::casadi::DM::vertcat(OCPConfigPtr_->getUpperBounds());
-    lbx(::casadi::Slice(0, OCPConfigPtr_->getFrameSize())) = frame;
-    ubx(::casadi::Slice(0, OCPConfigPtr_->getFrameSize())) = frame;
-
-    ::casadi::DM lbg = ::casadi::DM::vertcat({getConstraintLowerBounds()});
-    ::casadi::DM ubg = ::casadi::DM::vertcat({getConstraintUpperBounds()});
-
-    const int variableSize = OCPConfigPtr_->getFrameSize();
-    ::casadi::DM initialGuess;
-    if (setInitialGuess_) {
-        initialGuess = OCPConfigPtr_->getInitialGuess();
-    } else {
-        initialGuess = ::casadi::DM::repmat(::casadi::DM::zeros(variableSize, 1), OCPConfigPtr_->getHorizon());
-    }
-
-    arg["lbx"] = lbx;
-    arg["ubx"] = ubx;
-    arg["lbg"] = lbg;
-    arg["ubg"] = ubg;
-    arg["x0"] = firstTime_ ? initialGuess : optimalTrajectory_;
-    arg["p"] = reference;
-
-    if (!solverInputCheck(arg)) {
-        throw std::runtime_error("Solver input validation failed");
-    }
-    // 首次调用时初始化求解器
-    if (firstTime_) {
-        if (solverSettings.genCode || solverSettings.loadLib) {
-            // 根据求解器类型初始化库
-            if (solverSettings.solverType == SolverSettings::SolverType::IPOPT ||
-                solverSettings.solverType == SolverSettings::SolverType::MIXED) {
-                libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
-                                                   packagePath_ + "/code_gen/IPOPT_nlp_code.so");
-            }
-            if (solverSettings.solverType == SolverSettings::SolverType::SQP ||
-                solverSettings.solverType == SolverSettings::SolverType::MIXED) {
-                libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
-                                                 packagePath_ + "/code_gen/SQP_nlp_code.so");
-            }
+void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, const ::casadi::DM &reference, int solverId) {
+    // 检查求解器ID是否有效
+    {
+        std::lock_guard<std::mutex> lock(solverMutex_);
+        if (solverId < 0 || solverId >= solverStates_.size()) {
+            throw std::out_of_range("Invalid solver ID: " + std::to_string(solverId));
         }
-        firstTime_ = false;
+
+        // 检查求解器是否空闲
+        if (solverStates_[solverId] == SolverState::BUSY) {
+            throw std::runtime_error("Solver " + std::to_string(solverId) + " is already busy");
+        }
+
+        // 标记求解器为忙碌状态
+        solverStates_[solverId] = SolverState::BUSY;
     }
 
-// 确定使用哪个求解器
-    bool useLib = solverSettings.genCode || solverSettings.loadLib;
-    bool useMixedMode = solverSettings.solverType == SolverSettings::SolverType::MIXED && !firstTime_;
-    bool useIPOPT = true; // 默认使用IPOPT
+    try {
+        if (frame.size1() != OCPConfigPtr_->getFrameSize()) {
+            throw std::invalid_argument("State dimension mismatch: received " +
+                                        std::to_string(frame.size1()) +
+                                        ", expected " +
+                                        std::to_string(OCPConfigPtr_->getFrameSize()));
+        }
+        if (reference.size1() != reference_.size1()) {
+            throw std::invalid_argument("Reference dimension mismatch: received " +
+                                        std::to_string(reference.size1()) +
+                                        ", expected " +
+                                        std::to_string(reference_.size1()));
+        }
 
-// 对于MIXED模式，根据收敛性能选择求解器
-    if (useMixedMode) {
-        useIPOPT = optimalTrajectory_.is_empty() ||
-                   (res.count("f") > 0 && res.at("f").scalar() > 1e-6);
-    }
+        std::map<std::string, ::casadi::DM> arg, res;
+        ::casadi::DM lbx = ::casadi::DM::vertcat(OCPConfigPtr_->getLowerBounds());
+        ::casadi::DM ubx = ::casadi::DM::vertcat(OCPConfigPtr_->getUpperBounds());
+        lbx(::casadi::Slice(0, OCPConfigPtr_->getFrameSize())) = frame;
+        ubx(::casadi::Slice(0, OCPConfigPtr_->getFrameSize())) = frame;
 
-// 执行求解
-    switch (solverSettings.solverType) {
-        case SolverSettings::SolverType::IPOPT:
-            res = useLib ? libIPOPTSolver_(arg) : IPOPTSolver_(arg);
-            break;
+        ::casadi::DM lbg = ::casadi::DM::vertcat({getConstraintLowerBounds()});
+        ::casadi::DM ubg = ::casadi::DM::vertcat({getConstraintUpperBounds()});
 
-        case SolverSettings::SolverType::SQP:
-            res = useLib ? libSQPSolver_(arg) : SQPSolver_(arg);
-            break;
+        const int variableSize = OCPConfigPtr_->getFrameSize();
+        ::casadi::DM initialGuess;
 
-        case SolverSettings::SolverType::MIXED:
-            if (useIPOPT) {
-                res = useLib ? libIPOPTSolver_(arg) : IPOPTSolver_(arg);
-            } else {
-                res = useLib ? libSQPSolver_(arg) : SQPSolver_(arg);
+        // 使用特定求解器的初始猜测
+        if (setInitialGuess_) {
+            initialGuess = OCPConfigPtr_->getInitialGuess();
+        } else {
+            std::lock_guard<std::mutex> lock(solverMutex_);
+            initialGuess = firstTime_ ?
+                           ::casadi::DM::repmat(::casadi::DM::zeros(variableSize, 1), OCPConfigPtr_->getHorizon()) :
+                           (optimalTrajectories_[solverId].is_empty() ?
+                            ::casadi::DM::repmat(::casadi::DM::zeros(variableSize, 1), OCPConfigPtr_->getHorizon()) :
+                            optimalTrajectories_[solverId]);
+        }
+
+        arg["lbx"] = lbx;
+        arg["ubx"] = ubx;
+        arg["lbg"] = lbg;
+        arg["ubg"] = ubg;
+        arg["x0"] = initialGuess;
+        arg["p"] = reference;
+
+        if (!solverInputCheck(arg)) {
+            std::lock_guard<std::mutex> lock(solverMutex_);
+            solverStates_[solverId] = SolverState::FAILED;
+            throw std::runtime_error("Solver input validation failed");
+        }
+
+        // 首次调用时初始化求解器
+        if (firstTime_) {
+            if (solverSettings.genCode || solverSettings.loadLib) {
+                // 根据求解器类型初始化库
+                if (solverSettings.solverType == SolverSettings::SolverType::IPOPT ||
+                    solverSettings.solverType == SolverSettings::SolverType::MIXED) {
+                    libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
+                                                       packagePath_ + "/code_gen/IPOPT_nlp_code.so");
+                }
+                if (solverSettings.solverType == SolverSettings::SolverType::SQP ||
+                    solverSettings.solverType == SolverSettings::SolverType::MIXED) {
+                    libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
+                                                     packagePath_ + "/code_gen/SQP_nlp_code.so");
+                }
             }
-            break;
+            firstTime_ = false;
+        }
 
-        case SolverSettings::SolverType::CUDA_SQP:
-            res = OSQPSolverPtr_->getOptimalSolution(arg);
-            break;
+        // 确定使用哪个求解器
+        bool useLib = solverSettings.genCode || solverSettings.loadLib;
+        bool useMixedMode = solverSettings.solverType == SolverSettings::SolverType::MIXED && !firstTime_;
+        bool useIPOPT = true; // 默认使用IPOPT
+
+        // 对于MIXED模式，根据收敛性能选择求解器
+        if (useMixedMode) {
+            std::lock_guard<std::mutex> lock(solverMutex_);
+            useIPOPT = optimalTrajectories_[solverId].is_empty() ||
+                       (res.count("f") > 0 && res.at("f").scalar() > 1e-6);
+        }
+
+        // 执行求解
+        switch (solverSettings.solverType) {
+            case SolverSettings::SolverType::IPOPT:
+                res = useLib ? libIPOPTSolver_(arg) : IPOPTSolver_(arg);
+                break;
+
+            case SolverSettings::SolverType::SQP:
+                res = useLib ? libSQPSolver_(arg) : SQPSolver_(arg);
+                break;
+
+            case SolverSettings::SolverType::MIXED:
+                if (useIPOPT) {
+                    res = useLib ? libIPOPTSolver_(arg) : IPOPTSolver_(arg);
+                } else {
+                    res = useLib ? libSQPSolver_(arg) : SQPSolver_(arg);
+                }
+                break;
+
+            case SolverSettings::SolverType::CUDA_SQP:
+                res = OSQPSolverPtr_->getOptimalSolution(arg);
+                break;
+        }
+
+        if (res.empty()) {
+            std::lock_guard<std::mutex> lock(solverMutex_);
+            solverStates_[solverId] = SolverState::FAILED;
+            throw std::runtime_error("Solver returned empty result");
+        }
+
+        // 更新特定求解器的最优轨迹
+        {
+            std::lock_guard<std::mutex> lock(solverMutex_);
+            optimalTrajectories_[solverId] = res.at("x");
+            solverStates_[solverId] = SolverState::COMPLETED;
+        }
+    } catch (const std::exception &e) {
+        std::lock_guard<std::mutex> lock(solverMutex_);
+        solverStates_[solverId] = SolverState::FAILED;
+        throw; // 重新抛出异常
     }
-
-
-    if (res.empty()) {
-        throw std::runtime_error("Solver returned empty result");
-    }
-
-    optimalTrajectory_ = res.at("x");
 }
-
 void OptimalControlProblem::genSolver() {
     if (solverSettings.verbose) {
         std::cout << "\n=============== Generating Solver ===============" << std::endl;
@@ -669,8 +731,16 @@ bool OptimalControlProblem::solverInputCheck(std::map<std::string, ::casadi::DM>
     return true;
 }
 
-casadi::DM OptimalControlProblem::getOptimalTrajectory() {
-    return optimalTrajectory_;
+casadi::DM OptimalControlProblem::getOptimalTrajectory(int solverId) {
+    std::lock_guard<std::mutex> lock(solverMutex_);
+    if (solverId < 0 || solverId >= optimalTrajectories_.size()) {
+        throw std::out_of_range("Invalid solver ID: " + std::to_string(solverId));
+    }
+    return optimalTrajectories_[solverId];
+}
+
+int OptimalControlProblem::getMaxSolverCount() const {
+    return maxSolverCount_;
 }
 
 std::vector<casadi::SX> OptimalControlProblem::getConstraints() const {

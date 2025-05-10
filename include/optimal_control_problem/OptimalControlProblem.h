@@ -9,6 +9,8 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include "sqp_solver/SQPOptimizationSolver.h"
 #include "optimal_control_problem/OCP_config/OCPConfig.h"
+#include <mutex>
+#include <atomic>
 
 class OptimalControlProblem {
 private:
@@ -36,6 +38,13 @@ private:
         SQPSettings SQP_settings;
     };
 
+    enum class SolverState {
+        IDLE,
+        BUSY,
+        FAILED,
+        COMPLETED
+    };
+
     YAML::Node configNode_;
     SolverSettings solverSettings;
 
@@ -47,7 +56,8 @@ private:
     casadi::SXVector costs_;
     bool setInitialGuess_{false};
     bool firstTime_{true};
-    casadi::DM optimalTrajectory_;
+
+    std::vector<casadi::DM> optimalTrajectories_;
 
     std::string packagePath_;
 
@@ -56,6 +66,10 @@ private:
     casadi::Function libIPOPTSolver_;
     casadi::Function libSQPSolver_;
     std::shared_ptr<SQPOptimizationSolver> OSQPSolverPtr_;
+
+    std::vector<SolverState> solverStates_;
+    std::mutex solverMutex_;
+    std::atomic<int> maxSolverCount_{1}; // 默认为1个求解器
 
     // 新增：检查YAML配置是否有效
     bool validateConfig(const YAML::Node& config);
@@ -71,13 +85,17 @@ public:
     SolverSettings::SolverType getSolverType() const;
 
     casadi::SX getReference() const;
-    casadi::DM getOptimalTrajectory();
+
+    casadi::DM getOptimalTrajectory(int solverId = 0);
+    void setMaxSolverCount(int count);
+    int getMaxSolverCount() const;
 
     casadi::SX reference_;
     casadi::SX totalCost_;
 
     void genSolver();
-    void computeOptimalTrajectory(const casadi::DM &frame, const casadi::DM &reference);
+
+    void computeOptimalTrajectory(const casadi::DM &frame, const casadi::DM &reference, int solverId = 0);
 
     void setReference(const casadi::SX& reference);
 
@@ -106,6 +124,8 @@ public:
 
     void
     compileLibrary(const std::string &source_file, const std::string &output_file, const std::string &compile_flags);
+
+    SolverState getSolverState(int solverId = 0);
 };
 
 std::ostream &operator<<(std::ostream &os, const OptimalControlProblem &ocp);
