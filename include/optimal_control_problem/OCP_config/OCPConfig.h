@@ -2,30 +2,19 @@
 // Created by lock on 25-3-7.
 //
 
-// 在文件顶部添加
-#include <iostream>
-#include <iomanip>
-
-// 调试宏，可以根据需要开关
-#define DEBUG_OCP 1
-
-#define OCP_LOG(level, msg) \
-    if (DEBUG_OCP) { \
-        std::cout << "[" << level << "] " << msg << std::endl; \
-    }
-
-#define OCP_ERROR(msg) OCP_LOG("ERROR", msg)
-#define OCP_WARN(msg) OCP_LOG("WARN", msg)
-#define OCP_INFO(msg) OCP_LOG("INFO", msg)
-#define OCP_DEBUG(msg) OCP_LOG("DEBUG", msg)
-
-
 #ifndef BUILD_OCPCONFIG_H
 #define BUILD_OCPCONFIG_H
 
+#include <iostream>
+#include <iomanip>
+#include <stdexcept>
 #include "yaml-cpp/yaml.h"
 #include "casadi/casadi.hpp"
 #include <ament_index_cpp/get_package_share_directory.hpp>
+
+// 简化的错误处理宏
+#define OCP_ERROR_MSG(msg) \
+    std::cerr << "[ERROR] " << msg << std::endl
 
 // Frame是用来记录状态和输入变量的结构体，包括总大小、字段名称和偏移量等信息。
 struct Frame {
@@ -69,8 +58,6 @@ public:
     double getDt() const;
 
     int getFrameSize() const;
-
-//    void setStatusBounds(const ::casadi::DM &lowerBound, const ::casadi::DM &upperBound);
 
     void setInitialGuess(const casadi::DM &initialGuess);
 
