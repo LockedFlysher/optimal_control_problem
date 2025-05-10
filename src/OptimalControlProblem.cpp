@@ -272,7 +272,7 @@ void OptimalControlProblem::genSolver() {
             case SolverSettings::SolverType::SQP: {
                 casadi::Dict sqp_options;
                 Dict solver_options;
-                solver_options["qpsol"] = "qpoases";
+                solver_options["qpsol"] = "osqp";
                 solver_options["qpsol_options"] = sqp_options;
                 sqp_options["error_on_fail"] = false;
                 sqp_options["hessian_approximation"] = "exact";
