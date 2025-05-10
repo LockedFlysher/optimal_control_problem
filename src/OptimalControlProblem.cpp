@@ -123,105 +123,64 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
     if (!solverInputCheck(arg)) {
         throw std::runtime_error("Solver input validation failed");
     }
-    if (solverSettings.genCode || solverSettings.loadLib) {
-        if (firstTime_) {
-            switch (solverSettings.solverType) {
-                case SolverSettings::SolverType::IPOPT:
-                    libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
-                                                       packagePath_ + "/code_gen/IPOPT_nlp_code.so");
-                    res = libIPOPTSolver_(arg);
-                    break;
-                case SolverSettings::SolverType::SQP:
-                    libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
-                                                     packagePath_ + "/code_gen/SQP_nlp_code.so");
-                    res = libSQPSolver_(arg);
-                    break;
-                case SolverSettings::SolverType::MIXED:
-                    libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
-                                                       packagePath_ + "/code_gen/IPOPT_nlp_code.so");
-                    libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
-                                                     packagePath_ + "/code_gen/SQP_nlp_code.so");
-                    res = libIPOPTSolver_(arg);
-                    break;
-                case SolverSettings::SolverType::CUDA_SQP:
-                    res = OSQPSolverPtr_->getOptimalSolution(arg);
-                    break;
+    // 首次调用时初始化求解器
+    if (firstTime_) {
+        if (solverSettings.genCode || solverSettings.loadLib) {
+            // 根据求解器类型初始化库
+            if (solverSettings.solverType == SolverSettings::SolverType::IPOPT ||
+                solverSettings.solverType == SolverSettings::SolverType::MIXED) {
+                libIPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt",
+                                                   packagePath_ + "/code_gen/IPOPT_nlp_code.so");
             }
-            firstTime_ = false;
-        } else {
-            switch (solverSettings.solverType) {
-                case SolverSettings::SolverType::IPOPT:
-                    res = libIPOPTSolver_(arg);
-                    break;
-                case SolverSettings::SolverType::SQP:
-                    res = libSQPSolver_(arg);
-                    break;
-                case SolverSettings::SolverType::MIXED:
-                    // Choose solver based on convergence performance
-                    if (optimalTrajectory_.is_empty() ||
-                        (res.count("f") > 0 && res.at("f").scalar() > 1e-6)) {
-                        res = libIPOPTSolver_(arg);
-                    } else {
-                        res = libSQPSolver_(arg);
-                    }
-                    break;
-                case SolverSettings::SolverType::CUDA_SQP:
-                    res = OSQPSolverPtr_->getOptimalSolution(arg);
-                    break;
+            if (solverSettings.solverType == SolverSettings::SolverType::SQP ||
+                solverSettings.solverType == SolverSettings::SolverType::MIXED) {
+                libSQPSolver_ = ::casadi::nlpsol("sqpmethod_solver", "sqpmethod",
+                                                 packagePath_ + "/code_gen/SQP_nlp_code.so");
             }
         }
-    } else {
-        if (firstTime_) {
-            switch (solverSettings.solverType) {
-                case SolverSettings::SolverType::IPOPT:
-                    res = IPOPTSolver_(arg);
-                    break;
-                case SolverSettings::SolverType::SQP:
-                    res = SQPSolver_(arg);
-                    break;
-                case SolverSettings::SolverType::MIXED:
-                    res = IPOPTSolver_(arg);
-                    break;
-                case SolverSettings::SolverType::CUDA_SQP:
-                    res = OSQPSolverPtr_->getOptimalSolution(arg);
-                    break;
-            }
-            firstTime_ = false;
-        } else {
-            switch (solverSettings.solverType) {
-                case SolverSettings::SolverType::IPOPT:
-                    res = IPOPTSolver_(arg);
-                    break;
-                case SolverSettings::SolverType::SQP:
-                    res = SQPSolver_(arg);
-                    break;
-                case SolverSettings::SolverType::MIXED:
-                    // Choose solver based on convergence performance
-                    if (optimalTrajectory_.is_empty() ||
-                        (res.count("f") > 0 && res.at("f").scalar() > 1e-6)) {
-                        res = IPOPTSolver_(arg);
-                    } else {
-                        res = SQPSolver_(arg);
-                    }
-                    break;
-                case SolverSettings::SolverType::CUDA_SQP:
-                    res = OSQPSolverPtr_->getOptimalSolution(arg);
-                    break;
-            }
-        }
+        firstTime_ = false;
     }
+
+// 确定使用哪个求解器
+    bool useLib = solverSettings.genCode || solverSettings.loadLib;
+    bool useMixedMode = solverSettings.solverType == SolverSettings::SolverType::MIXED && !firstTime_;
+    bool useIPOPT = true; // 默认使用IPOPT
+
+// 对于MIXED模式，根据收敛性能选择求解器
+    if (useMixedMode) {
+        useIPOPT = optimalTrajectory_.is_empty() ||
+                   (res.count("f") > 0 && res.at("f").scalar() > 1e-6);
+    }
+
+// 执行求解
+    switch (solverSettings.solverType) {
+        case SolverSettings::SolverType::IPOPT:
+            res = useLib ? libIPOPTSolver_(arg) : IPOPTSolver_(arg);
+            break;
+
+        case SolverSettings::SolverType::SQP:
+            res = useLib ? libSQPSolver_(arg) : SQPSolver_(arg);
+            break;
+
+        case SolverSettings::SolverType::MIXED:
+            if (useIPOPT) {
+                res = useLib ? libIPOPTSolver_(arg) : IPOPTSolver_(arg);
+            } else {
+                res = useLib ? libSQPSolver_(arg) : SQPSolver_(arg);
+            }
+            break;
+
+        case SolverSettings::SolverType::CUDA_SQP:
+            res = OSQPSolverPtr_->getOptimalSolution(arg);
+            break;
+    }
+
 
     if (res.empty()) {
         throw std::runtime_error("Solver returned empty result");
     }
 
     optimalTrajectory_ = res.at("x");
-
-    if (solverSettings.verbose) {
-        std::cout << "\n=============== Optimization Results ===============" << std::endl;
-        std::cout << "Objective function value: " << res.at("f") << std::endl;
-        std::cout << "Optimal solution: " << res.at("x") << std::endl;
-    }
 }
 
 void OptimalControlProblem::genSolver() {
@@ -660,41 +619,52 @@ bool OptimalControlProblem::solverInputCheck(std::map<std::string, ::casadi::DM>
                   ", actual " + std::to_string(actual));
     };
 
+    // Check if required parameters exist
+    const std::vector<std::string> requiredParams = {"lbg", "ubg", "lbx", "ubx", "x0", "p"};
+    for (const auto& param : requiredParams) {
+        if (arg.find(param) == arg.end()) {
+            OCP_ERROR("Missing required parameter: " + param);
+            return false;
+        }
+    }
+
+    // Check constraint bounds dimensions
     int expected_lbg_ubg_size = ::casadi::DM::vertcat(getConstraintLowerBounds()).size1();
     if (arg["lbg"].size1() != expected_lbg_ubg_size) {
         printDimensionMismatch("lbg", expected_lbg_ubg_size, arg["lbg"].size1());
+        OCP_ERROR("Constraint lower bounds (lbg) have incorrect dimensions");
         return false;
     }
     if (arg["ubg"].size1() != expected_lbg_ubg_size) {
         printDimensionMismatch("ubg", expected_lbg_ubg_size, arg["ubg"].size1());
+        OCP_ERROR("Constraint upper bounds (ubg) have incorrect dimensions");
         return false;
     }
 
+    // Check variable bounds and initial guess dimensions
     int expected_lbx_ubx_x0_size = OCPConfigPtr_->getVariables().size1();
     if (arg["lbx"].size1() != expected_lbx_ubx_x0_size) {
         printDimensionMismatch("lbx", expected_lbx_ubx_x0_size, arg["lbx"].size1());
+        OCP_ERROR("Variable lower bounds (lbx) have incorrect dimensions");
         return false;
     }
     if (arg["ubx"].size1() != expected_lbx_ubx_x0_size) {
         printDimensionMismatch("ubx", expected_lbx_ubx_x0_size, arg["ubx"].size1());
+        OCP_ERROR("Variable upper bounds (ubx) have incorrect dimensions");
         return false;
     }
     if (arg["x0"].size1() != expected_lbx_ubx_x0_size) {
         printDimensionMismatch("x0", expected_lbx_ubx_x0_size, arg["x0"].size1());
+        OCP_ERROR("Initial guess (x0) has incorrect dimensions");
         return false;
     }
 
+    // Check parameter dimensions
     int expected_p_size = reference_.size1();
     if (arg["p"].size1() != expected_p_size) {
         printDimensionMismatch("p", expected_p_size, arg["p"].size1());
+        OCP_ERROR("Parameter vector (p) has incorrect dimensions");
         return false;
-    }
-
-    if (solverSettings.verbose) {
-        std::cout << "All dimension checks passed." << std::endl;
-        std::cout << "lbg/ubg dimensions: " << expected_lbg_ubg_size << std::endl;
-        std::cout << "lbx/ubx/x0 dimensions: " << expected_lbx_ubx_x0_size << std::endl;
-        std::cout << "p dimensions: " << expected_p_size << std::endl;
     }
     return true;
 }

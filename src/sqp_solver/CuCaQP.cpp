@@ -268,54 +268,6 @@ torch::Tensor CuCaQP::getSolutionAsTensor() {
     return solution;
 }
 
-void CuCaQP::printSolverData() {
-    // 直接访问OSQP内部数据
-    const auto *osqpData = solver_.data()->getData();
-
-    // 打印问题维度信息
-    std::cout << "问题维度: 变量数量 n = " << osqpData->n << ", 约束数量 m = " << osqpData->m << std::endl;
-
-    // 打印梯度向量q的前几个元素
-    std::cout << "梯度向量q (维度: " << osqpData->n << "):\n";
-//    const int maxPrintQ = std::min(5, osqpData->n); // 最多打印5个元素
-//    for (int i = 0; i < maxPrintQ; i++) {
-//        std::cout << osqpData->q[i] << " ";
-//    }
-//    if (osqpData->n > maxPrintQ) std::cout << "...";
-    std::cout << std::endl;
-
-    // 打印P矩阵信息及有限个非零元素
-    int nnzP = osqpData->P->p[osqpData->n]; // P中非零元素的数量
-    std::cout << "Hessian矩阵P: " << osqpData->n << "x" << osqpData->n << ", 非零元素: " << nnzP << std::endl;
-    const int maxPrintP = std::min(5, nnzP); // 最多打印5个非零元素
-    std::cout << "P的前" << maxPrintP << "个非零元素:\n";
-    int countP = 0;
-    for (int j = 0; j < osqpData->n && countP < maxPrintP; j++) {
-        for (int p = osqpData->P->p[j]; p < osqpData->P->p[j + 1] && countP < maxPrintP; p++) {
-            int i = osqpData->P->i[p];
-            c_float val = osqpData->P->x[p];
-            std::cout << "(" << i << "," << j << "): " << val << std::endl;
-            countP++;
-        }
-    }
-
-    // 打印A矩阵信息及有限个非零元素
-    int nnzA = osqpData->A->p[osqpData->n]; // A中非零元素的数量
-    std::cout << "约束矩阵A: " << osqpData->m << "x" << osqpData->n << ", 非零元素: " << nnzA << std::endl;
-    const int maxPrintA = std::min(5, nnzA); // 最多打印5个非零元素
-    std::cout << "A的前" << maxPrintA << "个非零元素:\n";
-    int countA = 0;
-    for (int j = 0; j < osqpData->n && countA < maxPrintA; j++) {
-        for (int p = osqpData->A->p[j]; p < osqpData->A->p[j + 1] && countA < maxPrintA; p++) {
-            int i = osqpData->A->i[p];
-            c_float val = osqpData->A->x[p];
-            std::cout << "(" << i << "," << j << "): " << val << std::endl;
-            countA++;
-        }
-    }
-}
-
-
 void CuCaQP::setSystem(const std::vector<torch::Tensor> &torchSystem) {
     // 检查输入向量大小
     if (torchSystem.size() != 5) {

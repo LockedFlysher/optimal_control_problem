@@ -322,14 +322,6 @@ torch::Tensor CasadiGpuEvaluator::getDenseResult(int output_index) {
                 torch::stack({row_idx, col_idx}), vals,
                 {nrows, ncols}
         ).to_dense().to(device);
-
-        // Print dimensions of converted result
-        for (int i = 0; i < result.dim(); i++) {
-            std::cout << result.sizes()[i];
-            if (i < result.dim() - 1) std::cout << " x ";
-        }
-        std::cout << "]" << std::endl;
-
         // Ensure returned tensor is 2D
         if (result.dim() == 1 && nrows > 1 && ncols > 1) {
             std::cout << "Warning: Result was unexpectedly flattened, attempting to reshape to ["

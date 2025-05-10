@@ -3,7 +3,8 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <yaml-cpp/yaml.h>
 #include <memory>
-#include <chrono> // 添加计时功能
+#include <chrono> // Added timing functionality
+#include <sstream> // 用于字符串流处理
 #include "optimal_control_problem/sqp_solver/AutoDifferentiator.h"
 #include "optimal_control_problem/sqp_solver/CasadiGpuEvaluator.h"
 #include "optimal_control_problem/sqp_solver/CuCaQP.h"
@@ -13,79 +14,79 @@
 class SQPOptimizationSolver {
 public:
     /**
-     * @brief 构造函数，初始化SQP求解器
-     * @param nlp 非线性规划问题的符号表达式字典
-     * @param options 求解器选项
-     * @param numSolvers 求解器数量，默认为1
+     * @brief Constructor, initializes the SQP solver
+     * @param nlp Dictionary of symbolic expressions for the nonlinear programming problem
+     * @param options Solver options
+     * @param numSolvers Number of solvers, default is 1
      */
     explicit SQPOptimizationSolver(::casadi::SXDict &nlp, ::casadi::Dict &options, int numSolvers = 1);
 
     ::casadi::Function getSXLocalSystemFunction() const;
 
     /**
-     * @brief 析构函数，释放资源
+     * @brief Destructor, releases resources
      */
     ~SQPOptimizationSolver() = default;
 
     /**
-     * @brief SQP求解方法 (LibTorch接口) - 单个实例
-     * @note 如果是MPC问题初始点是通过限制第一项的lbx和ubx来完成的，和OptimalControlProblem一致
-     * @param arg <string,DM>字典，用到了lbx,ubx,lbg,ubg,p(可选)
-     * @retval DMDict result 包含最优解x和目标函数值f
+     * @brief SQP solving method (LibTorch interface) - single instance
+     * @note For MPC problems, the initial point is set by restricting the first item's lbx and ubx, consistent with OptimalControlProblem
+     * @param arg <string,DM> dictionary, using lbx, ubx, lbg, ubg, p(optional)
+     * @retval DMDict result containing optimal solution x and objective function value f
      */
     casadi::DMDict getOptimalSolution(const casadi::DMDict &arg);
 
     /**
-     * @brief SQP求解方法 (LibTorch接口) - 多个实例
-     * @param args 多个输入参数字典的向量
-     * @retval std::vector<DMDict> 包含多个最优解和目标函数值的向量
+     * @brief SQP solving method (LibTorch interface) - multiple instances
+     * @param args Vector of multiple input parameter dictionaries
+     * @retval std::vector<DMDict> Vector containing multiple optimal solutions and objective function values
      */
     std::vector<casadi::DMDict> getOptimalSolution(const std::vector<casadi::DMDict> &args);
 
     /**
-     * @brief 设置是否输出详细信息
-     * @param verbose 是否输出详细信息
+     * @brief Set whether to output detailed information
+     * @param verbose Whether to output detailed information
      */
     void setVerbose(bool verbose);
     void loadFromFile();
 
 private:
-    // 自动微分器
+    // Auto-differentiator
     std::shared_ptr<AutoDifferentiator> objectiveFunctionAutoDifferentiatorPtr_;
     std::shared_ptr<AutoDifferentiator> constraintsAutoDifferentiator_;
 
-    // 求解器数量
+    // Number of solvers
     int numSolvers_;
 
-    // QP求解器 - 支持多个实例
+    // QP solver - supports multiple instances
     std::vector<CuCaQP> qpSolvers_;
 
-    // SQP参数
-    int stepNum_;         // 最大迭代次数
-    double alpha_;        // 步长因子
-    bool verbose_;        // 是否输出详细信息
-    bool useCUDA_{true};  // 是否使用CUDA的CuCaQP，默认启用
+    // SQP parameters
+    int stepNum_;         // Maximum number of iterations
+    double alpha_;        // Step size factor
+    bool verbose_;        // Whether to output detailed information
+    bool useCUDA_{true};  // Whether to use CUDA's CuCaQP, enabled by default
 
     // cusadi
-    std::string functionFilePath_; // 存储localsystemfunction的路径
+    std::string functionFilePath_; // Path to store localsystemfunction
     int N_ENVS;
     casadi::Function fn;
-    std::vector<std::unique_ptr<CasadiGpuEvaluator>> solvers_; // 多个求解器实例
+    std::vector<std::unique_ptr<CasadiGpuEvaluator>> solvers_; // Multiple solver instances
 
-    // 优化结果，使用Dict取出来 - 支持多个实例
+    // Optimization results, extracted using Dict - supports multiple instances
     std::vector<casadi::DMDict> results_;
     std::vector<std::map<std::string, torch::Tensor>> resultsTensor_;
 
-    // 约束边界
+    // Constraint boundaries
     casadi::DM lowerBounds_;
     casadi::DM upperBounds_;
 
-    // 目标函数
+    // Objective function
     casadi::Function objectiveFunction_;
 
     /**
-     * @brief 局部系统函数
-     * @note 依次序产生: 1. Hessian，2. gradient，3. A, 4. l，5. u
+     * @brief Local system function
+     * @note Produces in sequence: 1. Hessian, 2. gradient, 3. A, 4. l, 5. u
      * @param [0]reference [1]point [2]lowerBound [3]upperBound
      * @retval [0]Hessian [1]Gradient [2]A [3]l [4]u
      */
@@ -93,18 +94,36 @@ private:
 
 private:
     /**
-     * @brief 获取局部系统 (CasADi版本)
-     * @param arg 输入参数字典
-     * @param solverIndex 求解器索引
-     * @return 局部系统的DMVector
+     * @brief Get local system (CasADi version)
+     * @param arg Input parameter dictionary
+     * @param solverIndex Solver index
+     * @return DMVector of the local system
      */
     std::vector<torch::Tensor> getLocalSystem(const ::casadi::DMDict &arg, int solverIndex);
 
     /**
-     * @brief 将CasADi DM转换为torch::Tensor
-     * @param dm CasADi DM矩阵或向量
-     * @return 转换后的torch::Tensor
+     * @brief Convert CasADi DM to torch::Tensor
+     * @param dm CasADi DM matrix or vector
+     * @return Converted torch::Tensor
      */
     torch::Tensor dmToTensor(const ::casadi::DM &dm);
-    void setBackend(bool b);
+
+    /**
+     * @brief Set computation backend
+     * @param useCUDA Whether to use CUDA backend
+     */
+    void setBackend(bool useCUDA);
+
+    /**
+     * @brief 打印向量的前几个元素
+     * @param vec 要打印的向量
+     * @param maxElements 最多显示的元素数量
+     * @return 格式化的字符串
+     */
+    std::string printVectorPreview(const casadi::DM &vec, int maxElements = 5);
+
+    /**
+     * @brief 清屏函数
+     */
+    void clearScreen();
 };
