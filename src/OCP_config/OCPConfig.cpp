@@ -272,7 +272,7 @@ void OCPConfig::setInitialGuess(const ::casadi::DM &initialGuess) {
     initialGuess_ = initialGuess;
 }
 
-double OCPConfig::getDt() const {
+double OCPConfig::getTimeStep() const {
     return this->dt_;
 }
 

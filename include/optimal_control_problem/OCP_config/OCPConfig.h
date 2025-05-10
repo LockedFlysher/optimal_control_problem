@@ -55,7 +55,7 @@ public:
 
     int getHorizon() const;
 
-    double getDt() const;
+    double getTimeStep() const;
 
     int getFrameSize() const;
 

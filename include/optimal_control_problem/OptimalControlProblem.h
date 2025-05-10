@@ -62,6 +62,8 @@ private:
     // 新增：检查目录权限
     bool checkDirectoryPermissions(const std::string& path);
 
+    void printSummary() const;
+
 public:
     std::unique_ptr<OCPConfig> OCPConfigPtr_;
 

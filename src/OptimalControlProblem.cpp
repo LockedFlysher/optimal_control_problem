@@ -8,8 +8,10 @@
 #include <filesystem>
 #include <fstream>
 #include <unistd.h>
-#include <cstdlib>  // system调用python脚本
+#include <cstdlib>  // For system() to call Python scripts
 
+// Error reporting macro
+#define OCP_ERROR(msg) std::cerr << "[ERROR] " << msg << std::endl
 
 OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
     try {
@@ -21,7 +23,7 @@ OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
         OCPConfigPtr_ = std::make_unique<OCPConfig>(configNode);
         configNode_ = configNode;
 
-        // 读取solver设置
+        // Read solver settings
         const auto &solverSettings_node = configNode["solver_settings"];
         solverSettings.maxIter = solverSettings_node["max_iter"].as<int>();
         solverSettings.warmStart = solverSettings_node["warm_start"].as<bool>();
@@ -45,12 +47,13 @@ OptimalControlProblem::OptimalControlProblem(YAML::Node configNode) {
         }
 
         if (solverSettings.verbose) {
-            std::cout << "输出c代码且编译动态链接库：" << solverSettings.genCode << std::endl;
-            std::cout << "使用动态链接库对求解器进行加载：" << solverSettings.loadLib << std::endl;
+            std::cout << "Code generation and dynamic library compilation: " << (solverSettings.genCode ? "Enabled" : "Disabled") << std::endl;
+            std::cout << "Dynamic library loading for solver: " << (solverSettings.loadLib ? "Enabled" : "Disabled") << std::endl;
         }
     } catch (const YAML::Exception &e) {
         throw std::runtime_error("Error parsing YAML configuration: " + std::string(e.what()));
     }
+    printSummary();
 }
 
 bool OptimalControlProblem::validateConfig(const YAML::Node &config) {
@@ -69,7 +72,7 @@ bool OptimalControlProblem::checkDirectoryPermissions(const std::string &path) {
         if (!std::filesystem::exists(dir_path)) {
             return std::filesystem::create_directories(dir_path);
         }
-        // 检查写入权限
+        // Check write permissions
         return access(path.c_str(), W_OK) == 0;
     } catch (const std::filesystem::filesystem_error &e) {
         return false;
@@ -152,7 +155,7 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
                     res = libSQPSolver_(arg);
                     break;
                 case SolverSettings::SolverType::MIXED:
-                    // 根据收敛性能决定使用哪个求解器
+                    // Choose solver based on convergence performance
                     if (optimalTrajectory_.is_empty() ||
                         (res.count("f") > 0 && res.at("f").scalar() > 1e-6)) {
                         res = libIPOPTSolver_(arg);
@@ -191,7 +194,7 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
                     res = SQPSolver_(arg);
                     break;
                 case SolverSettings::SolverType::MIXED:
-                    // 根据收敛性能决定使用哪个求解器
+                    // Choose solver based on convergence performance
                     if (optimalTrajectory_.is_empty() ||
                         (res.count("f") > 0 && res.at("f").scalar() > 1e-6)) {
                         res = IPOPTSolver_(arg);
@@ -213,11 +216,10 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
     optimalTrajectory_ = res.at("x");
 
     if (solverSettings.verbose) {
-        std::cout << "\n=================== 优化结果 ===================" << std::endl;
-        std::cout << "目标函数值: " << res.at("f") << std::endl;
-        std::cout << "最优解: " << res.at("x") << std::endl;
+        std::cout << "\n=============== Optimization Results ===============" << std::endl;
+        std::cout << "Objective function value: " << res.at("f") << std::endl;
+        std::cout << "Optimal solution: " << res.at("x") << std::endl;
     }
-
 }
 
 void OptimalControlProblem::genSolver() {
@@ -240,13 +242,13 @@ void OptimalControlProblem::genSolver() {
 
     ::casadi::Dict basicOptions;
     basicOptions["verbose"] = solverSettings.verbose ? 1 : 0;
-    basicOptions["jit"] = false;  // 临时禁用JIT以避免代码生成时的冲突
+    basicOptions["jit"] = false;  // Temporarily disable JIT to avoid conflicts during code generation
 
-    // 获取当前工作目录的绝对路径
+    // Get the absolute path of the current working directory
     std::filesystem::path current_path = std::filesystem::current_path();
     const std::string code_dir = packagePath_ + "/code_gen/";
 
-    // 确保code_dir是绝对路径
+    // Ensure code_dir is an absolute path
     std::filesystem::path code_dir_abs = std::filesystem::absolute(code_dir);
 
     if (!checkDirectoryPermissions(code_dir_abs.string())) {
@@ -260,7 +262,7 @@ void OptimalControlProblem::genSolver() {
                 IPOPTSolver_ = ::casadi::nlpsol("ipopt_solver", "ipopt", nlp, ipopt_options);
 
                 if (solverSettings.genCode) {
-                    // 使用当前目录的绝对路径
+                    // Use absolute path of current directory
                     std::filesystem::path temp_source = current_path / "ipopt_temp.c";
                     std::filesystem::path target_source = code_dir_abs / "IPOPT_nlp_code.c";
                     std::filesystem::path target_lib = code_dir_abs / "IPOPT_nlp_code.so";
@@ -269,15 +271,15 @@ void OptimalControlProblem::genSolver() {
                         std::cout << "Generating IPOPT solver code at: " << temp_source << std::endl;
                     }
 
-                    // 在当前目录生成临时文件
+                    // Generate temporary file in current directory
                     IPOPTSolver_.generate_dependencies("ipopt_temp.c");
 
-                    // 验证临时文件生成
+                    // Verify temporary file generation
                     if (!std::filesystem::exists(temp_source)) {
                         throw std::runtime_error("Failed to generate IPOPT source file at: " + temp_source.string());
                     }
 
-                    // 移动到目标目录
+                    // Move to target directory
                     std::filesystem::copy_file(temp_source, target_source,
                                                std::filesystem::copy_options::overwrite_existing);
                     std::filesystem::remove(temp_source);
@@ -325,11 +327,11 @@ void OptimalControlProblem::genSolver() {
                 break;
             }
             case SolverSettings::SolverType::MIXED: {
-                // IPOPT配置
+                // IPOPT configuration
                 ::casadi::Dict ipopt_options = basicOptions;
                 IPOPTSolver_ = ::casadi::nlpsol("mixed_ipopt_solver", "ipopt", nlp, ipopt_options);
 
-                // SQP配置
+                // SQP configuration
                 casadi::Dict sqp_options;
                 sqp_options["qpsol"] = "qpoases";
                 sqp_options["error_on_fail"] = false;
@@ -343,7 +345,7 @@ void OptimalControlProblem::genSolver() {
                 SQPSolver_ = ::casadi::nlpsol("mixed_sqp_solver", "sqpmethod", nlp, sqp_options);
 
                 if (solverSettings.genCode) {
-                    // 生成IPOPT代码
+                    // Generate IPOPT code
                     std::filesystem::path ipopt_temp = current_path / "mixed_ipopt_temp.c";
                     std::filesystem::path ipopt_target = code_dir_abs / "IPOPT_nlp_code.c";
                     std::filesystem::path ipopt_lib = code_dir_abs / "IPOPT_nlp_code.so";
@@ -364,7 +366,7 @@ void OptimalControlProblem::genSolver() {
 
                     compileLibrary(ipopt_target.string(), ipopt_lib.string(), "-fPIC -shared -O1");
 
-                    // 生成SQP代码
+                    // Generate SQP code
                     std::filesystem::path sqp_temp = current_path / "mixed_sqp_temp.c";
                     std::filesystem::path sqp_target = code_dir_abs / "SQP_nlp_code.c";
                     std::filesystem::path sqp_lib = code_dir_abs / "SQP_nlp_code.so";
@@ -427,20 +429,21 @@ void OptimalControlProblem::genSolver() {
                                                std::filesystem::copy_options::overwrite_existing);
                     if (!std::filesystem::exists(cusadi_function_path)) {
                         throw std::runtime_error(
-                                "Failed to cp LocalSystemFunction from" + target_file.string() + "to : " +
+                                "Failed to copy LocalSystemFunction from " + target_file.string() + " to: " +
                                 cusadi_function_path);
                     }
                     const std::string run_codegen_path = packagePath_ + "/cusadi/run_codegen.py";
-                    const std::string command = "python3 " + run_codegen_path + " --fn=localSystemFunction";
-                    std::cout<<"compiling casadi function to .so for torch acceleration :"<<command<<"\n";
+                    // Compile with pytorch support
+                    const std::string command = "python3 " + run_codegen_path + " --fn=localSystemFunction --gen_pytorch=True";
+                    std::cout << "Compiling CasADi function to .so for PyTorch acceleration: " << command << std::endl;
                     int result = std::system(command.c_str());
-                    // 检查命令执行结果
+                    // Check command execution result
                     if (result != 0) {
-                        std::cerr << "Failed to run script(run_codegen.py),exit " << result << "" << std::endl;
-                        throw std::runtime_error("Failed to run script(run_codegen.py),exit " + result);
+                        OCP_ERROR("Failed to run script (run_codegen.py), exit code: " + std::to_string(result));
+                        throw std::runtime_error("Failed to run script (run_codegen.py), exit code: " + std::to_string(result));
                     }
                     if (solverSettings.verbose) {
-                        std::cout << "LocalSystemFunction successfully gen cuda code: "
+                        std::cout << "LocalSystemFunction successfully generated CUDA code: "
                                   << packagePath_ + "/cusadi/build/liblocalSystemFunction.so" << std::endl;
                     }
                     break;
@@ -451,10 +454,10 @@ void OptimalControlProblem::genSolver() {
                     const auto num_vars = vars.size1();
                     const auto num_constraints = constraints.size1();
                     const auto num_params = reference_.size1();
-                    std::cout << "Problem dimensions:\n"
-                              << "Variables: " << num_vars << "\n"
-                              << "Constraints: " << num_constraints << "\n"
-                              << "Parameters: " << num_params << std::endl;
+                    std::cout << "Problem dimensions:" << std::endl;
+                    std::cout << "  Variables: " << num_vars << std::endl;
+                    std::cout << "  Constraints: " << num_constraints << std::endl;
+                    std::cout << "  Parameters: " << num_params << std::endl;
                 }
         }
     } catch (const std::exception &e) {
@@ -531,7 +534,8 @@ OptimalControlProblem::SolverSettings::SolverType OptimalControlProblem::getSolv
 
 bool OptimalControlProblem::solverInputCheck(std::map<std::string, ::casadi::DM> arg) const {
     auto printDimensionMismatch = [](const std::string &name, int expected, int actual) {
-        std::cerr << name << " 的维度不对: 期望 " << expected << ", 实际 " << actual << std::endl;
+        OCP_ERROR(name + " dimension mismatch: expected " + std::to_string(expected) +
+                  ", actual " + std::to_string(actual));
     };
 
     int expected_lbg_ubg_size = ::casadi::DM::vertcat(getConstraintLowerBounds()).size1();
@@ -563,11 +567,12 @@ bool OptimalControlProblem::solverInputCheck(std::map<std::string, ::casadi::DM>
         printDimensionMismatch("p", expected_p_size, arg["p"].size1());
         return false;
     }
+
     if (solverSettings.verbose) {
-        std::cout << "所有维度检查通过。" << std::endl;
-        std::cout << "lbg/ubg 维度: " << expected_lbg_ubg_size << std::endl;
-        std::cout << "lbx/ubx/x0 维度: " << expected_lbx_ubx_x0_size << std::endl;
-        std::cout << "p 维度: " << expected_p_size << std::endl;
+        std::cout << "All dimension checks passed." << std::endl;
+        std::cout << "lbg/ubg dimensions: " << expected_lbg_ubg_size << std::endl;
+        std::cout << "lbx/ubx/x0 dimensions: " << expected_lbx_ubx_x0_size << std::endl;
+        std::cout << "p dimensions: " << expected_p_size << std::endl;
     }
     return true;
 }
@@ -594,29 +599,29 @@ void OptimalControlProblem::setReference(const casadi::SX &reference) {
 
 void OptimalControlProblem::addVectorCost(const casadi::DM &param, const SX &cost) {
     if (param.size1() != cost.size1()) {
-        std::cout << "损失的符号向量和参数向量维度不一致\n";
+        OCP_ERROR("Cost symbolic vector and parameter vector dimensions do not match");
         return;
     }
-    // 计算二次形式的标量损失: cost^T * diag(param) * cost
+    // Calculate quadratic form scalar cost: cost^T * diag(param) * cost
     SX weightedCost = SX::zeros(1, 1);
     for (int i = 0; i < cost.size1(); ++i) {
         weightedCost += param(i).scalar() * cost(i) * cost(i);
     }
-    // 将标量损失添加到总损失中
+    // Add scalar cost to total cost
     addScalarCost(weightedCost);
 }
 
 void OptimalControlProblem::addVectorCost(const std::vector<double> &param, const SX &cost) {
     if (param.size() != cost.size1()) {
-        std::cout << "损失的符号向量和参数向量维度不一致\n";
-        exit(-5);
+        OCP_ERROR("Cost symbolic vector and parameter vector dimensions do not match");
+        throw std::runtime_error("Vector cost dimensions mismatch");
     }
-    // 计算二次形式的标量损失: cost^T * diag(param) * cost
+    // Calculate quadratic form scalar cost: cost^T * diag(param) * cost
     SX weightedCost = SX::zeros(1, 1);
     for (int i = 0; i < cost.size1(); ++i) {
         weightedCost += param[i] * cost(i) * cost(i);
     }
-    // 将标量损失添加到总损失中
+    // Add scalar cost to total cost
     addScalarCost(weightedCost);
 }
 
@@ -629,12 +634,12 @@ void OptimalControlProblem::compileLibrary(const std::string &source_file,
         std::cout << "Compiling with command: " << compile_cmd << std::endl;
     }
 
-    // 检查源文件是否存在
+    // Check if source file exists
     if (!std::filesystem::exists(source_file)) {
         throw std::runtime_error("Source file does not exist: " + source_file);
     }
 
-    // 检查输出目录是否存在，如果不存在则创建
+    // Check if output directory exists, create if not
     std::filesystem::path output_path(output_file);
     auto output_dir = output_path.parent_path();
     if (!output_dir.empty() && !std::filesystem::exists(output_dir)) {
@@ -643,14 +648,14 @@ void OptimalControlProblem::compileLibrary(const std::string &source_file,
         }
     }
 
-    // 执行编译命令
+    // Execute compilation command
     int compile_result = std::system(compile_cmd.c_str());
     if (compile_result != 0) {
         throw std::runtime_error("Compilation failed for " + source_file +
                                  " with exit code: " + std::to_string(compile_result));
     }
 
-    // 验证输出文件是否生成
+    // Verify output file was generated
     if (!std::filesystem::exists(output_file)) {
         throw std::runtime_error("Compilation completed but output file not found: " + output_file);
     }
@@ -658,4 +663,40 @@ void OptimalControlProblem::compileLibrary(const std::string &source_file,
     if (solverSettings.verbose) {
         std::cout << "Successfully compiled " << output_file << std::endl;
     }
+}
+
+// Add a method to print OCP configuration summary
+void OptimalControlProblem::printSummary() const {
+    // Print solver settings
+    std::cout << "\nSolver Settings:" << std::endl;
+    std::cout << "  Solver Type: ";
+    switch (solverSettings.solverType) {
+        case SolverSettings::SolverType::IPOPT:
+            std::cout << "IPOPT";
+            break;
+        case SolverSettings::SolverType::SQP:
+            std::cout << "SQP";
+            break;
+        case SolverSettings::SolverType::MIXED:
+            std::cout << "MIXED (IPOPT+SQP)";
+            break;
+        case SolverSettings::SolverType::CUDA_SQP:
+            std::cout << "CUDA_SQP";
+            break;
+    }
+    std::cout << std::endl;
+    std::cout << "  Max Iterations: " << solverSettings.maxIter << std::endl;
+    std::cout << "  Warm Start: " << (solverSettings.warmStart ? "Enabled" : "Disabled") << std::endl;
+
+    if (solverSettings.solverType == SolverSettings::SolverType::SQP ||
+        solverSettings.solverType == SolverSettings::SolverType::MIXED ||
+        solverSettings.solverType == SolverSettings::SolverType::CUDA_SQP) {
+        std::cout << "  SQP Settings:" << std::endl;
+        std::cout << "    Alpha: " << solverSettings.SQP_settings.alpha << std::endl;
+        std::cout << "    Step Number: " << solverSettings.SQP_settings.stepNum << std::endl;
+    }
+    std::cout << "  Code Generation: " << (solverSettings.genCode ? "Enabled" : "Disabled") << std::endl;
+    std::cout << "  Library Loading: " << (solverSettings.loadLib ? "Enabled" : "Disabled") << std::endl;
+    // Print footer
+    std::cout << "==========================================================" << std::endl;
 }
