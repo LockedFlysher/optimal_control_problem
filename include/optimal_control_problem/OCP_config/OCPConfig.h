@@ -76,6 +76,12 @@ public:
 
     casadi::DM getInitialGuess();
 
+    /**
+     * Prints a formatted summary of the OCP configuration
+     * Displays horizon, time step, variable structure, and bounds in a tabular format
+     */
+    void printSummary() const;
+
     /*
      * 传入的参数是optimal_control_problem的Node
      * */

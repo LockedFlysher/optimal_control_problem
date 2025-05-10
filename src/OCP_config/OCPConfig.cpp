@@ -4,28 +4,6 @@
 
 #include "optimal_control_problem/OCP_config/OCPConfig.h"
 
-//casadi::SX OCPConfig::getInputVariable(int frameID, const std::string &fieldName) const {
-//    if (frameID < 0 || frameID >= horizon_) {
-//        throw std::out_of_range("Frame ID out of range");
-//    }
-//
-//    auto it = inputFrame_.fieldOffsets.find(fieldName);
-//    if (it == inputFrame_.fieldOffsets.end()) {
-//        throw std::invalid_argument("Field name not found in input frame");
-//    }
-//
-//    int startIndex = frameID * inputFrame_.totalSize + it->second;
-//    int fieldSize = 0;
-//    for (const auto &field: inputFrame_.fields) {
-//        if (field.first == fieldName) {
-//            fieldSize = field.second;
-//            break;
-//        }
-//    }
-//
-//    return inputVariables_(casadi::Slice(startIndex, startIndex + fieldSize));
-//}
-
 casadi::SX OCPConfig::getVariable(int stepID, const std::string &variableName) const {
     if (stepID < 0 || stepID >= horizon_) {
         throw std::out_of_range("Frame ID out of range");
@@ -101,6 +79,7 @@ OCPConfig::OCPConfig(YAML::Node configNode) {
     OCP_INFO("帧大小: " + std::to_string(variableFrame_.totalSize));
     variables_ = casadi::SX::sym("X", horizon_ * variableFrame_.totalSize, 1);
     OCP_INFO("OCPConfig初始化完成");
+    printSummary();
 }
 
 
@@ -248,48 +227,6 @@ void OCPConfig::parseOCPBounds(YAML::Node configNode) {
     }
 }
 
-////    使用一帧的下界完成所有变量的下界的设置，首先会clear掉原来的数据，防止重复添加，然后把一个帧的下界添加到整个状态变量的下界中
-//void OCPConfig::coverLowerStatusBounds(const casadi::SX &oneFrameLowerBound) {
-//    OCP_INFO("设置状态变量下界...");
-//    OCP_INFO("  一帧下界大小: " + std::to_string(oneFrameLowerBound.size1()) + "x" +
-//             std::to_string(oneFrameLowerBound.size2()));
-//    OCP_INFO("  horizon: " + std::to_string(horizon_));
-//
-//    statusLowerBounds_.clear();
-//
-//    try {
-//        for (int i = 0; i < horizon_; ++i) {
-//            // 将SX转换为DM
-//            casadi::DM dmBound = casadi::DM(oneFrameLowerBound);
-//            statusLowerBounds_.emplace_back(dmBound);
-//        }
-//        OCP_INFO("状态变量下界设置完成，大小: " + std::to_string(statusLowerBounds_.size()));
-//    } catch (const std::exception& e) {
-//        OCP_ERROR("设置状态变量下界失败: " + std::string(e.what()));
-//        throw;
-//    }
-//}
-//
-//void OCPConfig::coverLowerInputBounds(const casadi::SX &oneFrameLowerBound) {
-//    OCP_INFO("设置输入变量下界...");
-//    OCP_INFO("  一帧下界大小: " + std::to_string(oneFrameLowerBound.size1()) + "x" +
-//             std::to_string(oneFrameLowerBound.size2()));
-//    OCP_INFO("  horizon: " + std::to_string(horizon_));
-//
-//    inputLowerBounds_.clear();
-//
-//    try {
-//        for (int i = 0; i < horizon_; ++i) {
-//            casadi::DM dmBound = casadi::DM(oneFrameLowerBound);
-//            inputLowerBounds_.emplace_back(dmBound);
-//        }
-//        OCP_INFO("输入变量下界设置完成，大小: " + std::to_string(inputLowerBounds_.size()));
-//    } catch (const std::exception& e) {
-//        OCP_ERROR("设置输入变量下界失败: " + std::string(e.what()));
-//        throw;
-//    }
-//}
-
 void OCPConfig::coverLowerBounds(const casadi::SX &oneFrameLowerBound) {
     OCP_INFO("设置变量上界...");
     OCP_INFO("  一帧下界大小: " + std::to_string(oneFrameLowerBound.size1()) + "x" +
@@ -373,29 +310,6 @@ int OCPConfig::getFrameSize() const {
     return variableFrame_.totalSize;
 }
 
-//int OCPConfig::getInputFrameSize() const {
-//    return inputFrame_.totalSize;
-//}
-
-//void OCPConfig::setStatusBounds(const casadi::DM &lowerBound, const casadi::DM &upperBound) {
-//    if (lowerBound.size1() != variableFrame_.totalSize * horizon_) {
-//        std::cerr << "状态变量的下界维度不对，收到" << lowerBound.size1() << "维，期望"
-//                  << variableFrame_.totalSize * horizon_ << "维\n";
-//    }
-//    if (upperBound.size1() != variableFrame_.totalSize * horizon_) {
-//        std::cerr << "状态变量的上界维度不对，收到" << upperBound.size1() << "维，期望"
-//                  << variableFrame_.totalSize * horizon_ << "维\n";
-//    }
-//    if (lowerBound.size2() != 1 || upperBound.size2() != 1) {
-//        std::cerr << "状态变量的下界和上界的维度不对，收到" << lowerBound.size2() << "维和" << upperBound.size2()
-//                  << "维，期望1维\n";
-//    }
-//    upperBounds_.clear();
-//    statusLowerBounds_.clear();
-//    upperBounds_.emplace_back(upperBound);
-//    statusLowerBounds_.emplace_back(lowerBound);
-//}
-
 /**
  * @brief 设置优化问题的初始猜测解
  * @param initialGuess 包含整个预测时域的状态和输入初始值
@@ -420,10 +334,87 @@ double OCPConfig::getDt() const {
     return initialGuess_;
 }
 
-//casadi::DM OCPConfig::getVariableLowerBounds() const {
-//    return ::casadi::DM::vertcat({::casadi::DM::vertcat(statusLowerBounds_), ::casadi::DM::vertcat(inputLowerBounds_)});
-//}
-//
-//casadi::DM OCPConfig::getVariableUpperBounds() const {
-//    return ::casadi::DM::vertcat({::casadi::DM::vertcat(upperBounds_), ::casadi::DM::vertcat(inputUpperBounds_)});
-//}
+/**
+ * Prints a formatted summary of the OCP configuration
+ * Displays horizon, time step, variable structure, and bounds in a tabular format
+ */
+/**
+ * Prints a formatted summary of the OCP configuration
+ * Displays horizon, time step, variable structure, and bounds in a tabular format
+ */
+void OCPConfig::printSummary() const {
+    // Print header
+    std::cout << "\n=============== OCP Configuration Summary ===============" << std::endl;
+
+    // Print global settings
+    std::cout << "Global Settings:" << std::endl;
+    std::cout << "  Time Step (dt): " << std::fixed << std::setprecision(6) << dt_ << std::endl;
+    std::cout << "  Horizon (N):    " << horizon_ << std::endl;
+
+    // Print frame information
+    std::cout << "\nFrame Definition (Variables per Time Step):" << std::endl;
+    std::cout << "  Total Variables in Frame: " << variableFrame_.totalSize << std::endl;
+
+    // Table header
+    std::cout << "\n+-----------------+------+--------------------------+--------------------------+" << std::endl;
+    std::cout << "| Variable Name   | Size | Lower Bounds (per step)  | Upper Bounds (per step)  |" << std::endl;
+    std::cout << "+-----------------+------+--------------------------+--------------------------+" << std::endl;
+
+    // Table rows
+    for (const auto& field : variableFrame_.fields) {
+        const std::string& name = field.first;
+        int size = field.second;
+        int offset = variableFrame_.fieldOffsets.at(name);
+
+        // Variable name column (fixed width 15)
+        std::cout << "| " << std::left << std::setw(15) << name << " | ";
+
+        // Size column (fixed width 4)
+        std::cout << std::right << std::setw(4) << size << " | ";
+
+        // Lower bounds column (fixed width 24)
+        std::cout << std::left << std::setw(24);
+        std::stringstream lbStream;
+        lbStream << "[";
+        if (!lowerBounds_.empty()) {
+            for (int i = 0; i < size; ++i) {
+                if (i > 0) lbStream << ", ";
+                lbStream << std::fixed << std::setprecision(1) << lowerBounds_[0](offset + i).scalar();
+            }
+        } else {
+            lbStream << "Not set";
+        }
+        lbStream << "]";
+        std::cout << lbStream.str() << " | ";
+
+        // Upper bounds column (fixed width 24)
+        std::cout << std::left << std::setw(24);
+        std::stringstream ubStream;
+        ubStream << "[";
+        if (!upperBounds_.empty()) {
+            for (int i = 0; i < size; ++i) {
+                if (i > 0) ubStream << ", ";
+                ubStream << std::fixed << std::setprecision(1) << upperBounds_[0](offset + i).scalar();
+            }
+        } else {
+            ubStream << "Not set";
+        }
+        ubStream << "]";
+        std::cout << ubStream.str() << " |" << std::endl;
+    }
+
+    // Table footer
+    std::cout << "+-----------------+------+--------------------------+--------------------------+" << std::endl;
+
+    // Total variables
+    std::cout << "\nTotal Optimization Variables:" << std::endl;
+    std::cout << "  Across Horizon (Frame Size * N): " << (variableFrame_.totalSize * horizon_)
+              << " (" << variableFrame_.totalSize << " variables/step * " << horizon_ << " steps)" << std::endl;
+
+    // Bounds application explanation
+    std::cout << "\nBounds Application:" << std::endl;
+    std::cout << "  The 'Lower Bounds (per step)' and 'Upper Bounds (per step)' listed in" << std::endl;
+    std::cout << "  the table are applied at each of the " << horizon_ << " time steps within the horizon." << std::endl;
+    std::cout << "  The OCP solver will receive " << horizon_ << " sets of these "
+              << variableFrame_.totalSize << "x1 bound vectors." << std::endl;
+}
