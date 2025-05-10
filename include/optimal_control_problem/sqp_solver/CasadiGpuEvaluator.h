@@ -56,6 +56,8 @@ private:
      */
     void formatInputTensors(const std::vector<torch::Tensor>& inputs);
 
+    void resetTensors();
+
     /**
      * @brief GPU mode computation implementation
      */

@@ -150,11 +150,20 @@ void CasadiGpuEvaluator::initializeTensors() {
 }
 
 /**
+ * @brief Clear output and workspace tensors
+ */
+void CasadiGpuEvaluator::resetTensors() {
+    for (auto &t: output_tensors_) {
+        t.zero_();
+    }
+    work_tensor_.zero_();
+}
+
+/**
  * @brief Prepare input tensors
  * @param inputs Input tensor list
  */
 void CasadiGpuEvaluator::formatInputTensors(const std::vector<torch::Tensor> &inputs) {
-
     const size_t num_inputs = std::min(inputs.size(), input_tensors_.size());
 
     if (inputs.size() < input_tensors_.size()) {
@@ -191,6 +200,7 @@ void CasadiGpuEvaluator::formatInputTensors(const std::vector<torch::Tensor> &in
  */
 void CasadiGpuEvaluator::compute(const std::vector<torch::Tensor> &inputs) {
     // Clear previous computation results
+    resetTensors();
 
     // Prepare input tensors
     formatInputTensors(inputs);
