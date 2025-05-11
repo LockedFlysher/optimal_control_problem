@@ -91,7 +91,6 @@ void OptimalControlProblem::setSolverState(int solverId, SolverState state, cons
     stateChangeCV_.notify_all();
 }
 
-// 我在此修改：添加异步求解的内部实现函数
 void OptimalControlProblem::solveTrajectoryAsync(const casadi::DM &frame, const casadi::DM &reference, int solverId) {
     try {
         if (frame.size1() != OCPConfigPtr_->getFrameSize()) {
@@ -205,12 +204,14 @@ void OptimalControlProblem::solveTrajectoryAsync(const casadi::DM &frame, const 
         {
             std::lock_guard<std::mutex> lock(solverMutex_);
             optimalTrajectories_[solverId] = res.at("x");
+            // 将状态设置为COMPLETED，表示求解完成
             setSolverState(solverId, SolverState::COMPLETED);
         }
     } catch (const std::exception &e) {
         setSolverState(solverId, SolverState::FAILED, e.what());
     }
 }
+
 
 void OptimalControlProblem::setMaxSolverCount(int count) {
     if (count <= 0) {
@@ -255,7 +256,6 @@ bool OptimalControlProblem::checkDirectoryPermissions(const std::string &path) {
 }
 
 
-// 我在此修改：修改计算最优轨迹的函数实现为同步版本
 void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, const ::casadi::DM &reference, int solverId) {
     // 检查求解器ID是否有效
     {
@@ -264,18 +264,14 @@ void OptimalControlProblem::computeOptimalTrajectory(const ::casadi::DM &frame, 
             throw std::out_of_range("Invalid solver ID: " + std::to_string(solverId));
         }
 
-        // 检查求解器是否空闲
-        if (solverStates_[solverId] == SolverState::BUSY) {
-            throw std::runtime_error("Solver " + std::to_string(solverId) + " is already busy");
-        }
-
-        // 标记求解器为忙碌状态
+        // 取消状态检查，无论当前状态如何，都将状态设置为BUSY并继续
         solverStates_[solverId] = SolverState::BUSY;
     }
 
     // 直接调用异步求解函数的内部实现
     solveTrajectoryAsync(frame, reference, solverId);
 }
+
 
 // 我在此修改：添加等待求解完成的函数实现
 bool OptimalControlProblem::waitForSolver(int solverId, int timeoutMs) {
@@ -317,7 +313,6 @@ std::string OptimalControlProblem::getSolverErrorMessage(int solverId) {
     return errorMessages_[solverId];
 }
 
-// 我在此修改：添加异步计算最优轨迹的函数实现
 void OptimalControlProblem::computeOptimalTrajectoryAsync(const casadi::DM &frame, const casadi::DM &reference, int solverId) {
     // 检查求解器ID是否有效
     {
@@ -326,19 +321,19 @@ void OptimalControlProblem::computeOptimalTrajectoryAsync(const casadi::DM &fram
             throw std::out_of_range("Invalid solver ID: " + std::to_string(solverId));
         }
 
-        // 检查求解器是否空闲
-        if (solverStates_[solverId] == SolverState::BUSY) {
-            throw std::runtime_error("Solver " + std::to_string(solverId) + " is already busy");
-        }
-
         // 确保错误消息数组大小与求解器数量一致
         if (errorMessages_.size() < solverStates_.size()) {
             errorMessages_.resize(solverStates_.size());
         }
 
-        // 标记求解器为忙碌状态
+        // 取消状态检查，无论当前状态如何，都将状态设置为BUSY并继续
         solverStates_[solverId] = SolverState::BUSY;
         errorMessages_[solverId].clear();
+    }
+
+    // 如果之前有线程，确保它已经完成
+    if (solverId < solverThreads_.size() && solverThreads_[solverId].joinable()) {
+        solverThreads_[solverId].join();
     }
 
     // 创建新线程执行求解任务
@@ -347,11 +342,6 @@ void OptimalControlProblem::computeOptimalTrajectoryAsync(const casadi::DM &fram
     // 管理线程
     if (solverId >= solverThreads_.size()) {
         solverThreads_.resize(solverId + 1);
-    }
-
-    // 如果之前有线程，确保它已经完成
-    if (solverThreads_[solverId].joinable()) {
-        solverThreads_[solverId].join();
     }
 
     // 将新线程移动到管理数组中
@@ -850,6 +840,7 @@ casadi::DM OptimalControlProblem::getOptimalTrajectory(int solverId) {
     if (solverId < 0 || solverId >= optimalTrajectories_.size()) {
         throw std::out_of_range("Invalid solver ID: " + std::to_string(solverId));
     }
+    // 无论求解器状态如何，都返回最后一次计算的结果
     return optimalTrajectories_[solverId];
 }
 
